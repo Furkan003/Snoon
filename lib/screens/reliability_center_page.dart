@@ -44,7 +44,7 @@ class _ReliabilityCenterPageState extends State<ReliabilityCenterPage>
     try {
       final values = await Future.wait([
         widget.store.native.canScheduleExactAlarms(),
-        widget.store.native.notificationsGranted(),
+        widget.store.native.alarmNotificationsOperational(),
         widget.store.native.canUseFullScreenIntent(),
         widget.store.native.alarmStreamAudible(),
         widget.store.native.batteryOptimizationDisabled(),
@@ -135,7 +135,8 @@ class _ReliabilityCenterPageState extends State<ReliabilityCenterPage>
         _exact == true &&
         _notifications == true &&
         _fullScreen == true &&
-        _sound == true;
+        _sound == true &&
+        widget.store.lastNativeError == null;
     return Scaffold(
       appBar: AppBar(title: Text(context.l10n.reliabilityCenter)),
       body: ListView(
@@ -213,8 +214,8 @@ class _ReliabilityCenterPageState extends State<ReliabilityCenterPage>
             title: context.l10n.notificationPermission,
             subtitle: context.l10n.notificationCheckSubtitle,
             value: _notifications,
-            actionLabel: context.l10n.grantPermission,
-            onAction: widget.store.native.requestNotificationPermission,
+            actionLabel: context.l10n.openSettings,
+            onAction: widget.store.native.openNotificationSettings,
           ),
           const SizedBox(height: 9),
           _CheckTile(

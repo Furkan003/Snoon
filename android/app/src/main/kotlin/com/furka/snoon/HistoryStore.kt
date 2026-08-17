@@ -1,6 +1,7 @@
 package com.furka.snoon
 
 import android.content.Context
+import android.os.Build
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.Instant
@@ -17,7 +18,7 @@ object HistoryStore {
         action: String,
         disableAlarm: Boolean = false,
     ) {
-        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val prefs = prefs(context)
         val items = try {
             JSONArray(prefs.getString(EVENTS, "[]"))
         } catch (_: Exception) {
@@ -37,7 +38,7 @@ object HistoryStore {
     }
 
     fun consume(context: Context): List<Map<String, Any?>> {
-        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val prefs = prefs(context)
         val items = try {
             JSONArray(prefs.getString(EVENTS, "[]"))
         } catch (_: Exception) {
@@ -60,4 +61,20 @@ object HistoryStore {
         prefs.edit().putString(EVENTS, "[]").apply()
         return result
     }
+    private fun prefs(context: Context) = storageContext(context)
+        .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    private fun storageContext(context: Context): Context {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N || context.isDeviceProtectedStorage) {
+            return context
+        }
+        val deviceContext = context.createDeviceProtectedStorageContext()
+        try {
+            deviceContext.moveSharedPreferencesFrom(context, PREFS)
+        } catch (_: Exception) {
+            // Credential-protected storage may still be locked during Direct Boot.
+        }
+        return deviceContext
+    }
+
 }

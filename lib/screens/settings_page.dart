@@ -88,6 +88,8 @@ class SettingsPage extends StatelessWidget {
       if (context.mounted) showMessage(context, error.message.toString());
     } on PlatformException {
       if (context.mounted) showMessage(context, context.l10n.backupReadFailed);
+    } catch (_) {
+      if (context.mounted) showMessage(context, context.l10n.backupReadFailed);
     }
   }
 
@@ -202,29 +204,7 @@ class SettingsPage extends StatelessWidget {
                   onTap: () => _pickTimerRingtone(context),
                 ),
                 const Divider(height: 1),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.volume_up_outlined),
-                          const SizedBox(width: 16),
-                          Expanded(child: Text(context.l10n.alarmVolume)),
-                          Text('%${(settings.alarmVolume * 100).round()}'),
-                        ],
-                      ),
-                      Slider(
-                        value: settings.alarmVolume,
-                        onChanged: (_) {},
-                        onChangeEnd: (value) => store.updateSettings(
-                          settings.copyWith(alarmVolume: value),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                _AlarmVolumeControl(store: store),
                 const Divider(height: 1),
                 ListTile(
                   leading: const Icon(Icons.volume_off_outlined),
@@ -397,5 +377,57 @@ class SettingsPage extends StatelessWidget {
         ),
       );
     },
+  );
+}
+
+class _AlarmVolumeControl extends StatefulWidget {
+  const _AlarmVolumeControl({required this.store});
+
+  final AppStore store;
+
+  @override
+  State<_AlarmVolumeControl> createState() => _AlarmVolumeControlState();
+}
+
+class _AlarmVolumeControlState extends State<_AlarmVolumeControl> {
+  late double _value;
+
+  @override
+  void initState() {
+    super.initState();
+    _value = widget.store.settings.alarmVolume.clamp(0.05, 1).toDouble();
+  }
+
+  @override
+  void didUpdateWidget(covariant _AlarmVolumeControl oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final stored = widget.store.settings.alarmVolume.clamp(0.05, 1).toDouble();
+    if ((stored - _value).abs() > 0.001) _value = stored;
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.volume_up_outlined),
+            const SizedBox(width: 16),
+            Expanded(child: Text(context.l10n.alarmVolume)),
+            Text('%${(_value * 100).round()}'),
+          ],
+        ),
+        Slider(
+          min: 0.05,
+          value: _value,
+          onChanged: (value) => setState(() => _value = value),
+          onChangeEnd: (value) => widget.store.updateSettings(
+            widget.store.settings.copyWith(alarmVolume: value),
+          ),
+        ),
+      ],
+    ),
   );
 }

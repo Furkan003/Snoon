@@ -1,4 +1,4 @@
-const snoonVersionName = '1.1.0';
-const snoonBuildNumber = 2;
+const snoonVersionName = '1.1.1';
+const snoonBuildNumber = 3;
 
 const snoonVersion = '$snoonVersionName+$snoonBuildNumber';

@@ -284,20 +284,28 @@ class AlarmItem {
           return latest;
         });
 
-    for (var dayOffset = 0; dayOffset < 370; dayOffset++) {
-      final date = DateTime(now.year, now.month, now.day + dayOffset);
-      if (resumeAfter != null && !date.isAfter(resumeAfter)) continue;
-      if (group?.excludedDates.contains(dateKey(date)) ?? false) continue;
-      if (repeatDays.isNotEmpty && !repeatDays.contains(date.weekday)) continue;
+    // A range that crosses midnight still belongs to the day on which it
+    // started. Looking one schedule day back keeps (for example) Monday's
+    // 23:55–00:15 range alive just after midnight on Tuesday.
+    final firstDayOffset = isRange && rangeEndMinutes! >= 24 * 60 ? -1 : 0;
+    for (var dayOffset = firstDayOffset; dayOffset < 370; dayOffset++) {
+      final scheduleDate = DateTime(now.year, now.month, now.day + dayOffset);
+      if (resumeAfter != null && !scheduleDate.isAfter(resumeAfter)) continue;
+      if (group?.excludedDates.contains(dateKey(scheduleDate)) ?? false) {
+        continue;
+      }
+      if (repeatDays.isNotEmpty && !repeatDays.contains(scheduleDate.weekday)) {
+        continue;
+      }
       if (repeatDays.isEmpty &&
           oneShotDate != null &&
-          dateKey(date) != dateKey(oneShotDate!)) {
+          dateKey(scheduleDate) != dateKey(oneShotDate!)) {
         continue;
       }
 
       var shift = 0;
-      if (todayShiftDate == dateKey(date)) shift += todayShiftMinutes;
-      if (group?.todayShiftDate == dateKey(date)) {
+      if (todayShiftDate == dateKey(scheduleDate)) shift += todayShiftMinutes;
+      if (group?.todayShiftDate == dateKey(scheduleDate)) {
         shift += group?.todayShiftMinutes ?? 0;
       }
       final end = isRange ? rangeEndMinutes! : startMinutes;
@@ -307,9 +315,9 @@ class AlarmItem {
         minutes += intervalMinutes > 0 ? intervalMinutes : 1
       ) {
         final candidate = DateTime(
-          date.year,
-          date.month,
-          date.day,
+          scheduleDate.year,
+          scheduleDate.month,
+          scheduleDate.day,
           minutes ~/ 60,
           minutes % 60,
         ).add(Duration(minutes: shift));

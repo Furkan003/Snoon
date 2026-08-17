@@ -53,5 +53,9 @@ jobs:
       - name: Test
         run: flutter test
 
+      - name: Android lint
+        working-directory: android
+        run: ./gradlew :app:lintDebug
+
       - name: Build debug APK
         run: flutter build apk --debug

@@ -22,6 +22,12 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    bundle {
+        language {
+            enableSplit = false
+        }
+    }
+
     defaultConfig {
         applicationId = "com.furka.snoon"
         // You can update the following values to match your application needs.

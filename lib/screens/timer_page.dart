@@ -21,6 +21,26 @@ class _TimerPageState extends State<TimerPage> {
   bool _running = false;
   String? _timerId;
 
+  @override
+  void initState() {
+    super.initState();
+    _selectedSeconds = widget.store.timerSelectedSeconds;
+    _remainingSeconds = widget.store.timerRemainingSeconds;
+    _target = widget.store.timerTarget;
+    _running =
+        widget.store.timerRunning &&
+        _target != null &&
+        _target!.isAfter(DateTime.now());
+    _timerId = widget.store.timerId;
+    if (_running) {
+      _ticker = Timer.periodic(
+        const Duration(milliseconds: 250),
+        (_) => _tick(),
+      );
+      WidgetsBinding.instance.addPostFrameCallback((_) => _tick());
+    }
+  }
+
   void _setPreset(int seconds) {
     if (_running) return;
     setState(() {
@@ -97,22 +117,43 @@ class _TimerPageState extends State<TimerPage> {
             .inSeconds
             .clamp(0, 86400 * 7);
       }
-      if (_timerId != null) await widget.store.native.cancelTimer(_timerId!);
-      setState(() => _running = false);
+      if (_timerId != null) {
+        await widget.store.cancelTimerDelivery(_timerId!);
+        await widget.store.saveTimerState(
+          id: _timerId!,
+          selectedSeconds: _selectedSeconds,
+          remainingSeconds: _remainingSeconds,
+          running: false,
+        );
+      }
+      if (mounted) setState(() => _running = false);
       return;
     }
     if (_remainingSeconds <= 0) _remainingSeconds = _selectedSeconds;
     _target = DateTime.now().add(Duration(seconds: _remainingSeconds));
     _timerId ??= 'timer-${DateTime.now().millisecondsSinceEpoch}';
-    await widget.store.native.scheduleTimer(
+    final scheduled = await widget.store.scheduleTimerDelivery(
       id: _timerId!,
       label: context.l10n.timer,
       triggerAtMillis: _target!.millisecondsSinceEpoch,
-      ringtoneUri: widget.store.settings.timerRingtoneUri,
-      volume: widget.store.settings.alarmVolume,
+    );
+    if (!scheduled) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.permissionsWarningSubtitle)),
+        );
+      }
+      return;
+    }
+    await widget.store.saveTimerState(
+      id: _timerId!,
+      selectedSeconds: _selectedSeconds,
+      remainingSeconds: _remainingSeconds,
+      running: true,
+      target: _target,
     );
     _ticker = Timer.periodic(const Duration(milliseconds: 250), (_) => _tick());
-    setState(() => _running = true);
+    if (mounted) setState(() => _running = true);
   }
 
   void _tick() {
@@ -120,9 +161,12 @@ class _TimerPageState extends State<TimerPage> {
     final remaining = _target!.difference(DateTime.now()).inSeconds + 1;
     if (remaining <= 0) {
       _ticker?.cancel();
+      unawaited(widget.store.clearTimerState());
       setState(() {
         _running = false;
         _remainingSeconds = 0;
+        _target = null;
+        _timerId = null;
       });
     } else {
       setState(() => _remainingSeconds = remaining);
@@ -131,7 +175,9 @@ class _TimerPageState extends State<TimerPage> {
 
   Future<void> _reset() async {
     _ticker?.cancel();
-    if (_timerId != null) await widget.store.native.cancelTimer(_timerId!);
+    if (_timerId != null) await widget.store.cancelTimerDelivery(_timerId!);
+    await widget.store.clearTimerState();
+    if (!mounted) return;
     setState(() {
       _running = false;
       _remainingSeconds = _selectedSeconds;

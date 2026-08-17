@@ -28,6 +28,10 @@ class NativeAlarmService {
   Future<bool> notificationsGranted() async =>
       await _channel.invokeMethod<bool>('notificationsGranted') ?? false;
 
+  Future<bool> alarmNotificationsOperational() async =>
+      await _channel.invokeMethod<bool>('alarmNotificationsOperational') ??
+      false;
+
   Future<bool> batteryOptimizationDisabled() async =>
       await _channel.invokeMethod<bool>('batteryOptimizationDisabled') ?? false;
 
@@ -55,6 +59,9 @@ class NativeAlarmService {
 
   Future<void> openAppSettings() =>
       _channel.invokeMethod<void>('openAppSettings');
+
+  Future<void> openNotificationSettings() =>
+      _channel.invokeMethod<void>('openNotificationSettings');
 
   Future<String> deviceManufacturer() async =>
       await _channel.invokeMethod<String>('deviceManufacturer') ?? 'Android';

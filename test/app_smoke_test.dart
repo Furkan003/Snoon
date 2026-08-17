@@ -32,6 +32,9 @@ class _SmokeNativeAlarmService extends NativeAlarmService {
   Future<bool> notificationsGranted() async => true;
 
   @override
+  Future<bool> alarmNotificationsOperational() async => true;
+
+  @override
   Future<bool> canScheduleExactAlarms() async => true;
 
   @override

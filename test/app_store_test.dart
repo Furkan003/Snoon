@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:snoon/models/alarm_models.dart';
@@ -26,6 +27,16 @@ class _FakeNativeAlarmService extends NativeAlarmService {
     final result = nativeHistory;
     nativeHistory = [];
     return result;
+  }
+}
+
+class _FailingNativeAlarmService extends _FakeNativeAlarmService {
+  @override
+  Future<void> schedule(Map<String, dynamic> record) {
+    throw PlatformException(
+      code: 'exact_alarm_denied',
+      message: 'Tam alarm izni verilmedi.',
+    );
   }
 }
 
@@ -283,7 +294,7 @@ void main() {
     final backup = await store.createBackupJson();
     final decodedBackup = jsonDecode(backup) as Map<String, dynamic>;
 
-    expect(decodedBackup['appVersion'], '1.1.0+2');
+    expect(decodedBackup['appVersion'], '1.1.1+3');
     expect(decodedBackup['localeCode'], 'fr');
 
     await store.deleteAlarms(['backup-alarm']);
@@ -335,5 +346,75 @@ void main() {
       throwsFormatException,
     );
     expect(store.alarms.single.id, 'safe');
+  });
+
+  test(
+    'kullanıcının boşalttığı grup ve şehir listelerini yeniden oluşturmaz',
+    () async {
+      final first = AppStore(native: _FakeNativeAlarmService());
+      await first.load();
+      for (final group in [...first.groups]) {
+        await first.deleteGroup(group.id);
+      }
+      await first.removeCity(0);
+
+      final restored = AppStore(native: _FakeNativeAlarmService());
+      await restored.load();
+
+      expect(restored.groups, isEmpty);
+      expect(restored.cities, isEmpty);
+    },
+  );
+
+  test('çalışan zamanlayıcı durumunu yeniden yükler', () async {
+    final first = AppStore(native: _FakeNativeAlarmService());
+    await first.load();
+    final target = DateTime.now().add(const Duration(minutes: 5));
+    await first.saveTimerState(
+      id: 'timer-persisted',
+      selectedSeconds: 600,
+      remainingSeconds: 300,
+      running: true,
+      target: target,
+    );
+
+    final restored = AppStore(native: _FakeNativeAlarmService());
+    await restored.load();
+
+    expect(restored.timerId, 'timer-persisted');
+    expect(restored.timerRunning, isTrue);
+    expect(restored.timerSelectedSeconds, 600);
+    expect(restored.timerRemainingSeconds, inInclusiveRange(295, 300));
+  });
+
+  test('Android planlama hatasını kullanıcı durumuna yansıtır', () async {
+    final store = AppStore(native: _FailingNativeAlarmService());
+    await store.load();
+
+    await store.addAlarm(
+      const AlarmItem(
+        id: 'will-fail',
+        hour: 7,
+        minute: 0,
+        label: 'İzin testi',
+        repeatDays: [1, 2, 3, 4, 5, 6, 7],
+      ),
+    );
+
+    expect(store.lastNativeError, 'Tam alarm izni verilmedi.');
+  });
+
+  test('bozuk yedek alanlarını uygulamadan reddeder', () async {
+    final store = AppStore(native: _FakeNativeAlarmService());
+    await store.load();
+    final backup =
+        jsonDecode(await store.createBackupJson()) as Map<String, dynamic>;
+    backup['settings'] = {'alarmVolume': 4};
+
+    await expectLater(
+      store.restoreBackupJson(jsonEncode(backup)),
+      throwsFormatException,
+    );
+    expect(store.settings.alarmVolume, 0.8);
   });
 }

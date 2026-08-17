@@ -60,6 +60,7 @@ class AlarmActionReceiver : BroadcastReceiver() {
             ACTION_CANCEL_SNOOZE -> {
                 val id = record.optString("id")
                 AlarmScheduler.cancelSnooze(context, id)
+                AlarmScheduler.resumeRangeAfterCancelledSnooze(context, record)
                 HistoryStore.add(
                     context,
                     id,

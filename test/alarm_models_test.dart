@@ -206,6 +206,22 @@ void main() {
       expect(alarm.isRange, isTrue);
     });
 
+    test('gece yarısından sonra önceki günün aralığını sürdürür', () {
+      const alarm = AlarmItem(
+        id: 'overnight-continuation',
+        hour: 23,
+        minute: 55,
+        label: 'Gece aralığı',
+        repeatDays: [1],
+        rangeEndMinutes: 24 * 60 + 15,
+        intervalMinutes: 5,
+      );
+
+      final next = alarm.nextOccurrence(from: DateTime(2026, 8, 18, 0, 1));
+
+      expect(next, DateTime(2026, 8, 18, 0, 5));
+    });
+
     test('alarm ve grup tatilleri içinden en uzun olanı uygular', () {
       final alarm = AlarmItem(
         id: 'double-pause',

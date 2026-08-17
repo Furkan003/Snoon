@@ -11,6 +11,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
+import androidx.core.app.NotificationManagerCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -79,6 +80,20 @@ class MainActivity : FlutterActivity() {
                                 PackageManager.PERMISSION_GRANTED,
                         )
                     }
+                    "alarmNotificationsOperational" -> {
+                        val notificationsEnabled =
+                            NotificationManagerCompat.from(this).areNotificationsEnabled()
+                        val channelsEnabled = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            val manager = getSystemService(NotificationManager::class.java)
+                            listOf("ringing_alarm", "snoozed_alarm").all { channelId ->
+                                manager.getNotificationChannel(channelId)?.importance !=
+                                    NotificationManager.IMPORTANCE_NONE
+                            }
+                        } else {
+                            true
+                        }
+                        result.success(notificationsEnabled && channelsEnabled)
+                    }
                     "requestNotificationPermission" -> {
                         if (
                             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -138,6 +153,14 @@ class MainActivity : FlutterActivity() {
                                 Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                                 Uri.parse("package:$packageName"),
                             ),
+                        )
+                        result.success(null)
+                    }
+                    "openNotificationSettings" -> {
+                        startActivity(
+                            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                                putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                            },
                         )
                         result.success(null)
                     }

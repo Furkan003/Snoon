@@ -44,6 +44,8 @@ class AlarmReceiver : BroadcastReceiver() {
             record.optString("id", "alarm"),
             record.optString("label", strings.getString(R.string.alarm_default)),
             "rang",
+            disableAlarm = kind == AlarmScheduler.KIND_MAIN &&
+                AlarmScheduler.disablesAfterCurrentFire(record),
         )
 
         val serviceIntent = Intent(context, AlarmSoundService::class.java).apply {

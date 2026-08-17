@@ -203,48 +203,78 @@ class _AlarmPageState extends State<AlarmPage> {
                   ),
                 ],
         ),
-        body: alarms.isEmpty
-            ? EmptyState(
-                icon: Icons.alarm_add_outlined,
-                title: context.l10n.createFirstAlarm,
-                message: context.l10n.createFirstAlarmSubtitle,
-              )
-            : ListView(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
-                children: [
-                  _NextAlarmCard(store: widget.store),
-                  const SizedBox(height: 16),
-                  ...alarms.map(
-                    (alarm) => Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: _AlarmCard(
-                        alarm: alarm,
-                        group: widget.store.groupFor(alarm.groupId),
-                        selected: _selected.contains(alarm.id),
-                        selectionMode: _selectionMode,
-                        onTap: () {
-                          if (_selectionMode) {
-                            _toggleSelection(alarm.id);
-                          } else {
-                            _open(
-                              AlarmEditorPage(
-                                store: widget.store,
-                                alarm: alarm,
-                              ),
-                            );
-                          }
-                        },
-                        onLongPress: () => _toggleSelection(alarm.id),
-                        onToggle: (value) =>
-                            widget.store.toggleAlarm(alarm, value),
-                        onClearPause: alarm.pausedUntil == null
-                            ? null
-                            : () => widget.store.clearAlarmPause(alarm.id),
-                      ),
+        body: Column(
+          children: [
+            if (widget.store.lastNativeError != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                child: Material(
+                  color: Theme.of(context).colorScheme.errorContainer,
+                  borderRadius: BorderRadius.circular(18),
+                  child: ListTile(
+                    leading: const Icon(Icons.warning_amber_rounded),
+                    title: Text(context.l10n.checkPermissions),
+                    subtitle: Text(
+                      '${context.l10n.permissionsWarningSubtitle}\n'
+                      '${widget.store.lastNativeError}',
                     ),
+                    trailing: IconButton(
+                      tooltip: context.l10n.cancel,
+                      onPressed: widget.store.clearNativeError,
+                      icon: const Icon(Icons.close),
+                    ),
+                    onTap: () =>
+                        _open(ReliabilityCenterPage(store: widget.store)),
                   ),
-                ],
+                ),
               ),
+            Expanded(
+              child: alarms.isEmpty
+                  ? EmptyState(
+                      icon: Icons.alarm_add_outlined,
+                      title: context.l10n.createFirstAlarm,
+                      message: context.l10n.createFirstAlarmSubtitle,
+                    )
+                  : ListView(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
+                      children: [
+                        _NextAlarmCard(store: widget.store),
+                        const SizedBox(height: 16),
+                        ...alarms.map(
+                          (alarm) => Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: _AlarmCard(
+                              alarm: alarm,
+                              group: widget.store.groupFor(alarm.groupId),
+                              selected: _selected.contains(alarm.id),
+                              selectionMode: _selectionMode,
+                              onTap: () {
+                                if (_selectionMode) {
+                                  _toggleSelection(alarm.id);
+                                } else {
+                                  _open(
+                                    AlarmEditorPage(
+                                      store: widget.store,
+                                      alarm: alarm,
+                                    ),
+                                  );
+                                }
+                              },
+                              onLongPress: () => _toggleSelection(alarm.id),
+                              onToggle: (value) =>
+                                  widget.store.toggleAlarm(alarm, value),
+                              onClearPause: alarm.pausedUntil == null
+                                  ? null
+                                  : () =>
+                                        widget.store.clearAlarmPause(alarm.id),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+          ],
+        ),
         floatingActionButton: _selectionMode
             ? null
             : FloatingActionButton.large(

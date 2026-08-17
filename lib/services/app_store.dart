@@ -21,6 +21,9 @@ class AppStore extends ChangeNotifier {
   static const _citiesKey = 'cities_v1';
   static const _localeKey = 'locale_v1';
   static const _languageSelectedKey = 'language_selected_v1';
+  static const _groupsInitializedKey = 'groups_initialized_v1';
+  static const _citiesInitializedKey = 'cities_initialized_v1';
+  static const _timerStateKey = 'timer_state_v1';
   static const supportedLanguageCodes = {
     'tr',
     'en',
@@ -43,6 +46,13 @@ class AppStore extends ChangeNotifier {
   SleepProfile sleepProfile = const SleepProfile();
   String localeCode = 'en';
   bool languageSelected = false;
+  String? lastNativeError;
+
+  String? timerId;
+  int timerSelectedSeconds = 5 * 60;
+  int timerRemainingSeconds = 5 * 60;
+  DateTime? timerTarget;
+  bool timerRunning = false;
 
   String newId(String prefix) =>
       '$prefix-${DateTime.now().microsecondsSinceEpoch}';
@@ -63,13 +73,17 @@ class AppStore extends ChangeNotifier {
     history = _decodeList(_historyKey, AlarmHistoryEvent.fromJson);
     cities = _decodeList(_citiesKey, WorldCity.fromJson);
 
-    if (groups.isEmpty) {
+    final groupsInitialized =
+        _prefs.getBool(_groupsInitializedKey) ?? _prefs.containsKey(_groupsKey);
+    final citiesInitialized =
+        _prefs.getBool(_citiesInitializedKey) ?? _prefs.containsKey(_citiesKey);
+    if (!groupsInitialized) {
       groups = const [
         AlarmGroup(id: 'work', name: 'İş', colorValue: 0xFF8B5CF6),
         AlarmGroup(id: 'personal', name: 'Kişisel', colorValue: 0xFF2DD4BF),
       ];
     }
-    if (cities.isEmpty) {
+    if (!citiesInitialized) {
       cities = const [
         WorldCity(
           name: 'İstanbul',
@@ -77,6 +91,21 @@ class AppStore extends ChangeNotifier {
           timeZoneId: 'Europe/Istanbul',
         ),
       ];
+    }
+    if (!groupsInitialized || !citiesInitialized) {
+      await Future.wait([
+        if (!groupsInitialized) ...[
+          _prefs.setString(
+            _groupsKey,
+            jsonEncode(groups.map((item) => item.toJson()).toList()),
+          ),
+          _prefs.setBool(_groupsInitializedKey, true),
+        ],
+        if (!citiesInitialized) ...[
+          _persistCities(),
+          _prefs.setBool(_citiesInitializedKey, true),
+        ],
+      ]);
     }
 
     final rawSettings = _prefs.getString(_settingsKey);
@@ -97,6 +126,37 @@ class AppStore extends ChangeNotifier {
         );
       } catch (_) {
         sleepProfile = const SleepProfile();
+      }
+    }
+
+    final rawTimer = _prefs.getString(_timerStateKey);
+    if (rawTimer != null) {
+      try {
+        final timer = Map<String, dynamic>.from(jsonDecode(rawTimer) as Map);
+        timerId = timer['id'] as String?;
+        timerSelectedSeconds = (timer['selectedSeconds'] as int? ?? 5 * 60)
+            .clamp(1, 7 * 86400);
+        timerRemainingSeconds =
+            (timer['remainingSeconds'] as int? ?? timerSelectedSeconds).clamp(
+              0,
+              7 * 86400,
+            );
+        timerRunning = timer['running'] as bool? ?? false;
+        timerTarget = DateTime.tryParse(timer['target']?.toString() ?? '');
+        if (timerRunning && timerTarget != null) {
+          timerRemainingSeconds = timerTarget!
+              .difference(DateTime.now())
+              .inSeconds
+              .clamp(0, 7 * 86400);
+          if (timerRemainingSeconds <= 0) {
+            await clearTimerState();
+          }
+        } else {
+          timerRunning = false;
+          timerTarget = null;
+        }
+      } catch (_) {
+        await clearTimerState();
       }
     }
 
@@ -213,7 +273,7 @@ class AppStore extends ChangeNotifier {
     await _persistAlarms();
     notifyListeners();
     for (final id in idSet) {
-      await _safeNative(() => native.cancel(id));
+      await _safeNative(() => native.cancel(id), reportFailure: true);
     }
   }
 
@@ -259,10 +319,13 @@ class AppStore extends ChangeNotifier {
               if (item.id == group.id) group else item,
           ]
         : [...groups, group];
-    await _prefs.setString(
-      _groupsKey,
-      jsonEncode(groups.map((item) => item.toJson()).toList()),
-    );
+    await Future.wait([
+      _prefs.setString(
+        _groupsKey,
+        jsonEncode(groups.map((item) => item.toJson()).toList()),
+      ),
+      _prefs.setBool(_groupsInitializedKey, true),
+    ]);
     notifyListeners();
     await _rescheduleIds(
       alarms
@@ -278,10 +341,13 @@ class AppStore extends ChangeNotifier {
       for (final alarm in alarms)
         if (alarm.groupId == id) alarm.copyWith(groupId: null) else alarm,
     ];
-    await _prefs.setString(
-      _groupsKey,
-      jsonEncode(groups.map((item) => item.toJson()).toList()),
-    );
+    await Future.wait([
+      _prefs.setString(
+        _groupsKey,
+        jsonEncode(groups.map((item) => item.toJson()).toList()),
+      ),
+      _prefs.setBool(_groupsInitializedKey, true),
+    ]);
     await _persistAlarms();
     notifyListeners();
     await rescheduleAll();
@@ -304,6 +370,63 @@ class AppStore extends ChangeNotifier {
   Future<void> addCity(WorldCity city) async {
     cities = [...cities, city];
     await _persistCities();
+    notifyListeners();
+  }
+
+  Future<void> saveTimerState({
+    required String id,
+    required int selectedSeconds,
+    required int remainingSeconds,
+    required bool running,
+    DateTime? target,
+  }) async {
+    timerId = id;
+    timerSelectedSeconds = selectedSeconds.clamp(1, 7 * 86400);
+    timerRemainingSeconds = remainingSeconds.clamp(0, 7 * 86400);
+    timerRunning = running;
+    timerTarget = running ? target : null;
+    await _prefs.setString(
+      _timerStateKey,
+      jsonEncode({
+        'id': timerId,
+        'selectedSeconds': timerSelectedSeconds,
+        'remainingSeconds': timerRemainingSeconds,
+        'running': timerRunning,
+        'target': timerTarget?.toIso8601String(),
+      }),
+    );
+  }
+
+  Future<void> clearTimerState() async {
+    timerId = null;
+    timerSelectedSeconds = 5 * 60;
+    timerRemainingSeconds = 5 * 60;
+    timerTarget = null;
+    timerRunning = false;
+    await _prefs.remove(_timerStateKey);
+  }
+
+  Future<bool> scheduleTimerDelivery({
+    required String id,
+    required String label,
+    required int triggerAtMillis,
+  }) => _safeNative(
+    () => native.scheduleTimer(
+      id: id,
+      label: label,
+      triggerAtMillis: triggerAtMillis,
+      ringtoneUri: settings.timerRingtoneUri,
+      volume: settings.alarmVolume,
+    ),
+    reportFailure: true,
+  );
+
+  Future<bool> cancelTimerDelivery(String id) =>
+      _safeNative(() => native.cancelTimer(id), reportFailure: true);
+
+  void clearNativeError() {
+    if (lastNativeError == null) return;
+    lastNativeError = null;
     notifyListeners();
   }
 
@@ -337,51 +460,118 @@ class AppStore extends ChangeNotifier {
   }
 
   Future<void> restoreBackupJson(String raw) async {
-    final decoded = jsonDecode(raw);
-    if (decoded is! Map) throw const FormatException('Yedek biçimi geçersiz.');
-    final root = Map<String, dynamic>.from(decoded);
-    if (root['schemaVersion'] != 1 || root['app'] != 'Snoon') {
-      throw const FormatException(
-        'Bu dosya desteklenen bir Snoon yedeği değil.',
+    late final Map<String, dynamic> root;
+    late final List<AlarmItem> restoredAlarms;
+    late final List<AlarmGroup> restoredGroups;
+    late final List<AlarmHistoryEvent> restoredHistory;
+    late final List<WorldCity> restoredCities;
+    late final AppSettings restoredSettings;
+    late final SleepProfile restoredSleep;
+    String? restoredLocale;
+
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) {
+        throw const FormatException('Yedek biçimi geçersiz.');
+      }
+      root = Map<String, dynamic>.from(decoded);
+      if (root['schemaVersion'] != 1 || root['app'] != 'Snoon') {
+        throw const FormatException(
+          'Bu dosya desteklenen bir Snoon yedeği değil.',
+        );
+      }
+
+      List<T> decodeItems<T>(
+        String key,
+        T Function(Map<String, dynamic>) parse,
+      ) {
+        final value = root[key];
+        if (value is! List) throw FormatException('$key listesi eksik.');
+        return value.map((item) {
+          if (item is! Map) throw FormatException('$key öğesi geçersiz.');
+          return parse(Map<String, dynamic>.from(item));
+        }).toList();
+      }
+
+      restoredAlarms = decodeItems('alarms', AlarmItem.fromJson);
+      restoredGroups = decodeItems('groups', AlarmGroup.fromJson);
+      restoredHistory = decodeItems('history', AlarmHistoryEvent.fromJson);
+      restoredCities = decodeItems('cities', WorldCity.fromJson);
+      if (root['settings'] is! Map || root['sleepProfile'] is! Map) {
+        throw const FormatException('Yedek ayarları eksik.');
+      }
+      restoredSettings = AppSettings.fromJson(
+        Map<String, dynamic>.from(root['settings'] as Map),
       );
+      restoredSleep = SleepProfile.fromJson(
+        Map<String, dynamic>.from(root['sleepProfile'] as Map),
+      );
+      restoredLocale = root['localeCode']?.toString();
+    } on FormatException {
+      rethrow;
+    } catch (_) {
+      throw const FormatException('Yedek içeriği bozuk veya eksik.');
     }
 
-    List<T> decodeItems<T>(String key, T Function(Map<String, dynamic>) parse) {
-      final value = root[key];
-      if (value is! List) throw FormatException('$key listesi eksik.');
-      return value
-          .map((item) => parse(Map<String, dynamic>.from(item as Map)))
-          .toList();
+    final groupIds = restoredGroups.map((item) => item.id).toSet();
+    if (restoredGroups.any(
+          (group) =>
+              group.id.trim().isEmpty ||
+              group.name.trim().isEmpty ||
+              group.excludedDates.any(
+                (date) => DateTime.tryParse(date) == null,
+              ),
+        ) ||
+        groupIds.length != restoredGroups.length) {
+      throw const FormatException('Yedekte geçersiz alarm grubu var.');
     }
-
-    final restoredAlarms = decodeItems('alarms', AlarmItem.fromJson);
-    final restoredGroups = decodeItems('groups', AlarmGroup.fromJson);
-    final restoredHistory = decodeItems('history', AlarmHistoryEvent.fromJson);
-    final restoredCities = decodeItems('cities', WorldCity.fromJson);
-    final restoredSettings = AppSettings.fromJson(
-      Map<String, dynamic>.from(root['settings'] as Map),
-    );
-    final restoredSleep = SleepProfile.fromJson(
-      Map<String, dynamic>.from(root['sleepProfile'] as Map),
-    );
-    final restoredLocale = root['localeCode']?.toString();
-    if (restoredAlarms.any(
-      (alarm) =>
+    if (restoredAlarms.any((alarm) {
+      final end = alarm.rangeEndMinutes;
+      return alarm.id.trim().isEmpty ||
           !alarm.hour.inRange(0, 23) ||
           !alarm.minute.inRange(0, 59) ||
-          alarm.intervalMinutes <= 0,
-    )) {
-      throw const FormatException('Yedekte geçersiz alarm saati var.');
+          alarm.intervalMinutes <= 0 ||
+          alarm.intervalMinutes > 24 * 60 ||
+          alarm.repeatDays.any((day) => !day.inRange(1, 7)) ||
+          alarm.repeatDays.toSet().length != alarm.repeatDays.length ||
+          (alarm.groupId != null && !groupIds.contains(alarm.groupId)) ||
+          (end != null &&
+              (end <= alarm.startMinutes || end > alarm.startMinutes + 1439));
+    })) {
+      throw const FormatException('Yedekte geçersiz alarm kaydı var.');
     }
     if (restoredAlarms.map((item) => item.id).toSet().length !=
         restoredAlarms.length) {
       throw const FormatException('Yedekte yinelenen alarm kimliği var.');
     }
+    if (!restoredSettings.alarmVolume.isFinite ||
+        restoredSettings.alarmVolume < 0.05 ||
+        restoredSettings.alarmVolume > 1 ||
+        restoredSettings.autoSilenceMinutes <= 0 ||
+        restoredSettings.snoozeMinutes <= 0 ||
+        restoredSettings.maxSnoozes < 0 ||
+        restoredSettings.preNotificationMinutes < 0) {
+      throw const FormatException('Yedekte geçersiz uygulama ayarı var.');
+    }
+    if (!restoredSleep.bedHour.inRange(0, 23) ||
+        !restoredSleep.wakeHour.inRange(0, 23) ||
+        !restoredSleep.bedMinute.inRange(0, 59) ||
+        !restoredSleep.wakeMinute.inRange(0, 59) ||
+        restoredSleep.windDownMinutes <= 0 ||
+        restoredSleep.days.any((day) => !day.inRange(1, 7))) {
+      throw const FormatException('Yedekte geçersiz uyku ayarı var.');
+    }
+    if (restoredCities.any(
+      (city) =>
+          city.name.trim().isEmpty || !city.offsetMinutes.inRange(-840, 840),
+    )) {
+      throw const FormatException('Yedekte geçersiz dünya saati var.');
+    }
 
-    await _safeNative(native.cancelAll);
+    await _safeNative(native.cancelAll, reportFailure: true);
     alarms = restoredAlarms;
     groups = restoredGroups;
-    history = restoredHistory;
+    history = restoredHistory.take(300).toList();
     cities = restoredCities;
     settings = restoredSettings;
     sleepProfile = restoredSleep;
@@ -395,6 +585,7 @@ class AppStore extends ChangeNotifier {
         _groupsKey,
         jsonEncode(groups.map((item) => item.toJson()).toList()),
       ),
+      _prefs.setBool(_groupsInitializedKey, true),
       _prefs.setString(_settingsKey, jsonEncode(settings.toJson())),
       _prefs.setString(
         _historyKey,
@@ -466,21 +657,21 @@ class AppStore extends ChangeNotifier {
 
   Future<void> _schedule(AlarmItem alarm) async {
     if (!alarm.enabled) {
-      await _safeNative(() => native.cancel(alarm.id));
+      await _safeNative(() => native.cancel(alarm.id), reportFailure: true);
       return;
     }
     final record = _nativeRecord(alarm);
     if (record['triggerAtMillis'] == null) {
-      await _safeNative(() => native.cancel(alarm.id));
+      await _safeNative(() => native.cancel(alarm.id), reportFailure: true);
       return;
     }
-    await _safeNative(() => native.schedule(record));
+    await _safeNative(() => native.schedule(record), reportFailure: true);
   }
 
   Future<void> _scheduleSleepReminder(SleepProfile profile) async {
     const id = 'sleep-bedtime-reminder';
     if (!profile.enabled || profile.days.isEmpty) {
-      await _safeNative(() => native.cancel(id));
+      await _safeNative(() => native.cancel(id), reportFailure: true);
       return;
     }
 
@@ -507,7 +698,7 @@ class AppStore extends ChangeNotifier {
     );
     final next = reminder.nextOccurrence();
     if (next == null) {
-      await _safeNative(() => native.cancel(id));
+      await _safeNative(() => native.cancel(id), reportFailure: true);
       return;
     }
     await _safeNative(
@@ -528,6 +719,7 @@ class AppStore extends ChangeNotifier {
         'morningRoutine': false,
         'showOnLockScreen': false,
       }),
+      reportFailure: true,
     );
   }
 
@@ -584,18 +776,36 @@ class AppStore extends ChangeNotifier {
     jsonEncode(alarms.map((item) => item.toJson()).toList()),
   );
 
-  Future<void> _persistCities() => _prefs.setString(
-    _citiesKey,
-    jsonEncode(cities.map((item) => item.toJson()).toList()),
-  );
+  Future<void> _persistCities() => Future.wait([
+    _prefs.setString(
+      _citiesKey,
+      jsonEncode(cities.map((item) => item.toJson()).toList()),
+    ),
+    _prefs.setBool(_citiesInitializedKey, true),
+  ]).then((_) {});
 
-  Future<void> _safeNative(Future<void> Function() operation) async {
+  Future<bool> _safeNative(
+    Future<void> Function() operation, {
+    bool reportFailure = false,
+  }) async {
     try {
       await operation();
+      if (reportFailure && lastNativeError != null) {
+        lastNativeError = null;
+        if (ready) notifyListeners();
+      }
+      return true;
     } on MissingPluginException {
       // Non-Android previews intentionally run without alarm delivery.
-    } on PlatformException {
-      // Reliability Center exposes missing permissions to the user.
+      return false;
+    } on PlatformException catch (error) {
+      if (reportFailure) {
+        lastNativeError = error.message?.trim().isNotEmpty == true
+            ? error.message!.trim()
+            : error.code;
+        if (ready) notifyListeners();
+      }
+      return false;
     }
   }
 }

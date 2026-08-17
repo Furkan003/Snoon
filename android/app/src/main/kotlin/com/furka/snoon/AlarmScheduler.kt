@@ -130,6 +130,12 @@ object AlarmScheduler {
         }
     }
 
+    fun disablesAfterCurrentFire(record: JSONObject): Boolean {
+        if (record.optBoolean("fixed", false)) return false
+        if (record.optBoolean("deleteAfterRinging", false)) return true
+        return nextTrigger(record, System.currentTimeMillis() + 10_000L) == null
+    }
+
     fun advanceAfterFire(context: Context, record: JSONObject, occurrenceToken: Long) {
         if (record.optBoolean("fixed", false)) {
             removeRecord(context, record.getString("id"))
@@ -141,25 +147,11 @@ object AlarmScheduler {
             cancelSnooze(context, id)
             cancelBackup(context, id, occurrenceToken)
             removeRecord(context, id)
-            HistoryStore.add(
-                context,
-                id,
-                record.optString("label", "Alarm"),
-                "Çaldıktan sonra silindi",
-                disableAlarm = true,
-            )
             return
         }
         val next = nextTrigger(record, System.currentTimeMillis() + 10_000L)
         if (next == null) {
             removeRecord(context, record.getString("id"))
-            HistoryStore.add(
-                context,
-                record.getString("id"),
-                record.optString("label", "Alarm"),
-                "Tek sefer tamamlandı",
-                disableAlarm = true,
-            )
             return
         }
         record.put("triggerAtMillis", next)
@@ -178,6 +170,18 @@ object AlarmScheduler {
         cancelStableKind(context, id, KIND_SNOOZE)
         clearFiredSnooze(context, id)
         SnoozeNotification.cancel(context, id)
+    }
+
+    fun resumeRangeAfterCancelledSnooze(context: Context, record: JSONObject) {
+        if (record.isNull("rangeEndMinutes") || record.optBoolean("deleteAfterRinging", false)) {
+            return
+        }
+        val restored = getRecord(context, record.optString("id"))
+            ?: JSONObject(record.toString())
+        restored.remove(SNOOZE_TRIGGER)
+        restored.remove(SNOOZE_COUNT)
+        restored.remove("triggerAtMillis")
+        schedule(context, restored, persist = true)
     }
 
     fun cancelAll(context: Context) {
@@ -252,31 +256,37 @@ object AlarmScheduler {
         }
         val interval = record.optInt("intervalMinutes", 5).coerceAtLeast(1)
 
-        for (offset in 0..370) {
-            val date = afterDate.plusDays(offset.toLong())
-            if (pauseUntil != null && !date.isAfter(pauseUntil)) continue
-            if (excludedSet.contains(date.toString())) continue
+        val firstOffset = if (endMinutes >= 24 * 60) -1 else 0
+        for (offset in firstOffset..370) {
+            val scheduleDate = afterDate.plusDays(offset.toLong())
+            if (pauseUntil != null && !scheduleDate.isAfter(pauseUntil)) continue
+            if (excludedSet.contains(scheduleDate.toString())) continue
             if (days.length() > 0) {
                 var matches = false
                 for (index in 0 until days.length()) {
-                    if (days.optInt(index) == date.dayOfWeek.value) matches = true
+                    if (days.optInt(index) == scheduleDate.dayOfWeek.value) matches = true
                 }
                 if (!matches) continue
-            } else if (oneShotDate.isNotEmpty() && date.toString() != oneShotDate) {
+            } else if (oneShotDate.isNotEmpty() && scheduleDate.toString() != oneShotDate) {
                 continue
             }
 
             var shift = 0
-            if (record.optString("alarmShiftDate", "") == date.toString()) {
+            if (record.optString("alarmShiftDate", "") == scheduleDate.toString()) {
                 shift += record.optInt("alarmShiftMinutes", 0)
             }
-            if (record.optString("groupShiftDate", "") == date.toString()) {
+            if (record.optString("groupShiftDate", "") == scheduleDate.toString()) {
                 shift += record.optInt("groupShiftMinutes", 0)
             }
             var minute = startMinutes
             while (minute <= endMinutes) {
-                val candidate = date.atStartOfDay(zone)
-                    .plusMinutes((minute + shift).toLong())
+                val shiftedMinutes = minute + shift
+                val dayDelta = Math.floorDiv(shiftedMinutes, 24 * 60)
+                val minuteOfDay = Math.floorMod(shiftedMinutes, 24 * 60)
+                val candidate = scheduleDate
+                    .plusDays(dayDelta.toLong())
+                    .atTime(minuteOfDay / 60, minuteOfDay % 60)
+                    .atZone(zone)
                     .toInstant()
                     .toEpochMilli()
                 if (candidate > afterMillis) return candidate
