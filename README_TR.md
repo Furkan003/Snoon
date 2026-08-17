@@ -1,14 +1,10 @@
-<p align="center">
-  <img src="assets/branding/snoon-icon-source.png" width="128" alt="Snoon uygulama logosu">
-</p>
+# Snoon
 
-<h1 align="center">Snoon</h1>
+![Snoon uygulama logosu](./android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png)
 
-<p align="center"><strong>Gerçek hayat programları için güvenilir Android alarmı.</strong></p>
+**Gerçek hayat programları için güvenilir Android alarmı.**
 
-<p align="center">
-  <a href="README.md">English</a> · <a href="README_TR.md">Türkçe</a>
-</p>
+[English](./README.md) · [Türkçe](./README_TR.md)
 
 Snoon; alışılmış alarm, dünya saati, kronometre, zamanlayıcı ve uyku araçlarını esnek program yönetimiyle birleştiren, Flutter ile geliştirilmiş gizlilik odaklı bir saat uygulamasıdır. Bir saat aralığındaki bütün alarmları tek işlemle oluşturabilir, tekrarlanan alarm gruplarını tatil boyunca duraklatabilir veya kalıcı programı bozmadan yalnızca bugünün saatlerini kaydırabilirsin.
 
@@ -28,18 +24,13 @@ Snoon; alışılmış alarm, dünya saati, kronometre, zamanlayıcı ve uyku ara
 
 ## Ekran görüntüleri
 
-<p align="center">
-  <img src="store-assets/screenshots/00-language-selection.png" width="210" alt="Snoon dil seçimi">
-  <img src="store-assets/screenshots/01-alarm-list.png" width="210" alt="Snoon alarm listesi">
-  <img src="store-assets/screenshots/02-world-clock.png" width="210" alt="Snoon dünya saati">
-</p>
+| Dil seçimi | Alarm listesi | Dünya saati |
+| --- | --- | --- |
+| ![Snoon dil seçimi](./store-assets/screenshots/00-language-selection.png) | ![Snoon alarm listesi](./store-assets/screenshots/01-alarm-list.png) | ![Snoon dünya saati](./store-assets/screenshots/02-world-clock.png) |
 
-<p align="center">
-  <img src="store-assets/screenshots/03-settings-and-backup.png" width="210" alt="Snoon ayarlar ve yedekleme">
-  <img src="store-assets/screenshots/04-actionable-alarm-notification.png" width="260" alt="Yönetilebilir Snoon alarm bildirimi">
-  <img src="store-assets/screenshots/05-math-dismiss-task.png" width="260" alt="Snoon matematik kapatma görevi">
-  <img src="store-assets/screenshots/06-french-native-alarm.png" width="260" alt="Fransızca yerel Snoon alarm ekranı">
-</p>
+| Ayarlar ve yedekleme | Yönetilebilir bildirim | Matematik görevi | Yerel alarm |
+| --- | --- | --- | --- |
+| ![Snoon ayarlar ve yedekleme](./store-assets/screenshots/03-settings-and-backup.png) | ![Yönetilebilir Snoon alarm bildirimi](./store-assets/screenshots/04-actionable-alarm-notification.png) | ![Snoon matematik kapatma görevi](./store-assets/screenshots/05-math-dismiss-task.png) | ![Fransızca yerel Snoon alarm ekranı](./store-assets/screenshots/06-french-native-alarm.png) |
 
 ## Özellikler
 

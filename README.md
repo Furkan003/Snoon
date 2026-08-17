@@ -1,14 +1,10 @@
-<p align="center">
-  <img src="assets/branding/snoon-icon-source.png" width="128" alt="Snoon app icon">
-</p>
+# Snoon
 
-<h1 align="center">Snoon</h1>
+![Snoon app icon](./android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png)
 
-<p align="center"><strong>A reliable Android alarm clock for real-life schedules.</strong></p>
+**A reliable Android alarm clock for real-life schedules.**
 
-<p align="center">
-  <a href="README.md">English</a> · <a href="README_TR.md">Türkçe</a>
-</p>
+[English](./README.md) · [Türkçe](./README_TR.md)
 
 Snoon is a privacy-friendly Flutter clock app that combines familiar alarm, world clock, stopwatch, timer and sleep tools with flexible scheduling features. Create an entire series of alarms from a time range, pause recurring alarm groups for a holiday, or shift today's schedule without changing the permanent plan.
 
@@ -28,18 +24,13 @@ Snoon is a privacy-friendly Flutter clock app that combines familiar alarm, worl
 
 ## Screenshots
 
-<p align="center">
-  <img src="store-assets/screenshots/00-language-selection.png" width="210" alt="Snoon language selection">
-  <img src="store-assets/screenshots/01-alarm-list.png" width="210" alt="Snoon alarm list">
-  <img src="store-assets/screenshots/02-world-clock.png" width="210" alt="Snoon world clock">
-</p>
+| Language selection | Alarm list | World clock |
+| --- | --- | --- |
+| ![Snoon language selection](./store-assets/screenshots/00-language-selection.png) | ![Snoon alarm list](./store-assets/screenshots/01-alarm-list.png) | ![Snoon world clock](./store-assets/screenshots/02-world-clock.png) |
 
-<p align="center">
-  <img src="store-assets/screenshots/03-settings-and-backup.png" width="210" alt="Snoon settings and backup">
-  <img src="store-assets/screenshots/04-actionable-alarm-notification.png" width="260" alt="Actionable Snoon alarm notification">
-  <img src="store-assets/screenshots/05-math-dismiss-task.png" width="260" alt="Snoon math dismissal task">
-  <img src="store-assets/screenshots/06-french-native-alarm.png" width="260" alt="French native Snoon alarm screen">
-</p>
+| Settings and backup | Actionable notification | Math task | Native alarm |
+| --- | --- | --- | --- |
+| ![Snoon settings and backup](./store-assets/screenshots/03-settings-and-backup.png) | ![Actionable Snoon alarm notification](./store-assets/screenshots/04-actionable-alarm-notification.png) | ![Snoon math dismissal task](./store-assets/screenshots/05-math-dismiss-task.png) | ![French native Snoon alarm screen](./store-assets/screenshots/06-french-native-alarm.png) |
 
 ## Features
 
