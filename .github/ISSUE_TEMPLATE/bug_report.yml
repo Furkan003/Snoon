@@ -1,0 +1,59 @@
+name: Bug report
+description: Report a reproducible Snoon problem
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not include personal alarm data, signing credentials or a real backup file.
+  - type: input
+    id: version
+    attributes:
+      label: Snoon version
+      placeholder: 1.0.0
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device and Android version
+      placeholder: Pixel 8, Android 16
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Alarm delivery or sound
+        - Snooze or dismiss
+        - Groups or scheduling
+        - World clock
+        - Stopwatch or timer
+        - Sleep schedule
+        - Language or layout
+        - Backup or restore
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      placeholder: List the exact steps and times used.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual result
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Reliability checks
+      options:
+        - label: I checked Snoon's Reliability Center.
+        - label: I removed personal data from screenshots and logs.
+          required: true

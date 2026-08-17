@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Snoon</string>
+    <string name="alarm_default">Alarm</string>
+    <string name="timer_default">Timer</string>
+    <string name="alarm_upper">ALARM</string>
+    <string name="timer_upper">TIMER</string>
+    <string name="alarm_ringing">Alarm is ringing</string>
+    <string name="dismiss">Dismiss</string>
+    <string name="snooze_minutes">Snooze %1$d min</string>
+    <string name="snoozed_minutes">Snoozed for %1$d minutes</string>
+    <string name="rings_again_at">%1$s • rings again at %2$s</string>
+    <string name="snooze_toast">Snoozed for %1$d minutes • rings again at %2$s</string>
+    <string name="cancel_snooze">Cancel snooze</string>
+    <string name="snooze_cancelled">Snooze cancelled</string>
+    <string name="max_snoozes_reached">Maximum snoozes reached</string>
+    <string name="complete_math_task">Complete the math task to dismiss the alarm</string>
+    <string name="shake_task_instruction">Shake the phone 5 times to dismiss the alarm</string>
+    <string name="shake_to_dismiss">Shake to dismiss (%1$d/5)</string>
+    <string name="shake_first">Shake the phone 5 times first</string>
+    <string name="sensor_unavailable">This device has no motion sensor; the dismiss button is now enabled.</string>
+    <string name="math_task_message">Enter the result to dismiss the alarm.</string>
+    <string name="check_answer">Check</string>
+    <string name="cancel">Cancel</string>
+    <string name="wrong_answer">The result is incorrect</string>
+    <string name="ringing_channel">Snoon ringing alarms</string>
+    <string name="ringing_channel_description">Shows snooze and dismiss controls while an alarm is ringing</string>
+    <string name="snoozed_channel">Snoozed alarms</string>
+    <string name="snoozed_channel_description">Shows when the alarm will ring again</string>
+    <string name="upcoming_channel">Upcoming alarms</string>
+    <string name="upcoming_channel_description">Pre-alerts and morning routine notifications</string>
+    <string name="good_morning">Good morning</string>
+    <string name="upcoming_alarm">Upcoming alarm</string>
+    <string name="gentle_start">A gentle start for %1$s</string>
+    <string name="will_ring_soon">%1$s will ring soon</string>
+    <string name="sleep_channel">Sleep reminders</string>
+    <string name="sleep_channel_description">Wind-down notifications from your sleep schedule</string>
+    <string name="prepare_for_sleep">Time to prepare for sleep</string>
+    <string name="bedtime_remaining">%1$d minutes until bedtime.</string>
+    <string name="selected_ringtone">Selected ringtone</string>
+    <string name="test_alarm">Test alarm</string>
+</resources>
