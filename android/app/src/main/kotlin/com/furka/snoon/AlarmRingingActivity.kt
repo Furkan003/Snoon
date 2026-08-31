@@ -13,6 +13,8 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.text.InputType
 import android.view.Gravity
@@ -37,6 +39,8 @@ import kotlin.math.sqrt
 
 class AlarmRingingActivity : ComponentActivity(), SensorEventListener {
     companion object {
+        private const val STATE_SHAKE_COUNT = "shakeCount"
+        private val CLOCK_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
         private var activeActivity: WeakReference<AlarmRingingActivity>? = null
 
         fun finishIfVisible() {
@@ -56,6 +60,17 @@ class AlarmRingingActivity : ComponentActivity(), SensorEventListener {
     private var shakeCount = 0
     private var lastShakeAt = 0L
     private var dismissButton: Button? = null
+    private var clockView: TextView? = null
+    private val uiHandler = Handler(Looper.getMainLooper())
+
+    // The screen can stay up for the whole auto-silence window, so the clock
+    // has to keep ticking instead of freezing at the moment the alarm fired.
+    private val clockTick = object : Runnable {
+        override fun run() {
+            clockView?.text = LocalTime.now().format(CLOCK_FORMAT)
+            uiHandler.postDelayed(this, 1_000L - System.currentTimeMillis() % 1_000L)
+        }
+    }
 
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(LocaleHelper.wrap(newBase))
@@ -63,6 +78,8 @@ class AlarmRingingActivity : ComponentActivity(), SensorEventListener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Rotating the phone must not throw away shake progress.
+        shakeCount = savedInstanceState?.getInt(STATE_SHAKE_COUNT, 0) ?: 0
         readIntent(intent)
         configureLockScreen()
         onBackPressedDispatcher.addCallback(
@@ -82,12 +99,19 @@ class AlarmRingingActivity : ComponentActivity(), SensorEventListener {
         setContentView(buildContent())
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putInt(STATE_SHAKE_COUNT, shakeCount)
+    }
+
     override fun onStart() {
         super.onStart()
         activeActivity = WeakReference(this)
+        uiHandler.post(clockTick)
     }
 
     override fun onStop() {
+        uiHandler.removeCallbacks(clockTick)
         if (activeActivity?.get() === this) activeActivity = null
         super.onStop()
     }
@@ -163,13 +187,14 @@ class AlarmRingingActivity : ComponentActivity(), SensorEventListener {
             gravity = Gravity.CENTER
         })
         root.addView(space(32))
-        root.addView(TextView(this).apply {
-            text = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm"))
+        clockView = TextView(this).apply {
+            text = LocalTime.now().format(CLOCK_FORMAT)
             setTextColor(Color.WHITE)
             textSize = 72f
             typeface = Typeface.create("sans", Typeface.NORMAL)
             gravity = Gravity.CENTER
-        })
+        }
+        root.addView(clockView)
         root.addView(TextView(this).apply {
             text = record.optString("label", getString(R.string.alarm_default))
             setTextColor(Color.rgb(210, 210, 220))
@@ -213,8 +238,8 @@ class AlarmRingingActivity : ComponentActivity(), SensorEventListener {
         }
 
         dismissButton = Button(this).apply {
-            text = if (task == "shake") {
-                getString(R.string.shake_to_dismiss, 0)
+            text = if (task == "shake" && shakeCount < 5) {
+                getString(R.string.shake_to_dismiss, shakeCount)
             } else {
                 getString(R.string.dismiss)
             }
@@ -290,16 +315,36 @@ class AlarmRingingActivity : ComponentActivity(), SensorEventListener {
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
 
+    /** Question text paired with the answer the user has to type. */
+    private fun buildMathTask(): Pair<String, Int> =
+        when (record.optString("mathDifficulty", "easy")) {
+            "hard" -> {
+                val a = (11..19).random()
+                val b = (3..9).random()
+                val c = (10..49).random()
+                "$a × $b + $c = ?" to a * b + c
+            }
+            "medium" -> {
+                val a = (3..12).random()
+                val b = (3..12).random()
+                "$a × $b = ?" to a * b
+            }
+            else -> {
+                val a = (10..29).random()
+                val b = (3..18).random()
+                "$a + $b = ?" to a + b
+            }
+        }
+
     private fun showMathTask() {
-        val first = (10..29).random()
-        val second = (3..18).random()
+        val (question, answer) = buildMathTask()
         val input = EditText(this).apply {
             inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_SIGNED
             gravity = Gravity.CENTER
             textSize = 22f
         }
         val dialog = AlertDialog.Builder(this)
-            .setTitle("$first + $second = ?")
+            .setTitle(question)
             .setMessage(getString(R.string.math_task_message))
             .setView(input)
             .setNegativeButton(getString(R.string.cancel), null)
@@ -307,7 +352,7 @@ class AlarmRingingActivity : ComponentActivity(), SensorEventListener {
             .create()
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                if (input.text.toString().toIntOrNull() == first + second) {
+                if (input.text.toString().toIntOrNull() == answer) {
                     dialog.dismiss()
                     dismissAlarm()
                 } else {
@@ -357,6 +402,15 @@ class AlarmRingingActivity : ComponentActivity(), SensorEventListener {
         finishAndRemoveTask()
     }
 
+    private fun showDismissTaskHint() {
+        val message = if (record.optString("dismissTask", "none") == "math") {
+            R.string.complete_math_task
+        } else {
+            R.string.shake_task_instruction
+        }
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+    }
+
     private fun stopSound() {
         startService(Intent(this, AlarmSoundService::class.java).apply {
             action = AlarmSoundService.ACTION_STOP
@@ -371,7 +425,13 @@ class AlarmRingingActivity : ComponentActivity(), SensorEventListener {
                     true
                 }
                 "dismiss" -> {
-                    if (record.optString("dismissTask", "none") == "none") dismissAlarm()
+                    // A volume press must not bypass the dismissal task, but it
+                    // should say why nothing happened instead of staying silent.
+                    if (record.optString("dismissTask", "none") == "none") {
+                        dismissAlarm()
+                    } else {
+                        showDismissTaskHint()
+                    }
                     true
                 }
                 else -> super.onKeyDown(keyCode, event)

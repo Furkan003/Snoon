@@ -759,4 +759,185 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get sameStartEndError =>
       'Start- und Endzeit dürfen nicht gleich sein.';
+
+  @override
+  String get defaultAlarmRingtone => 'System-Alarmton';
+
+  @override
+  String get defaultTimerRingtone => 'System-Timerton';
+
+  @override
+  String get backupErrorInvalidFormat =>
+      'Das Format der Sicherung ist ungültig.';
+
+  @override
+  String get backupErrorUnsupportedFile =>
+      'Diese Datei ist keine unterstützte Snoon-Sicherung.';
+
+  @override
+  String get backupErrorCorruptContent =>
+      'Der Inhalt der Sicherung ist beschädigt oder unvollständig.';
+
+  @override
+  String get backupErrorInvalidGroup =>
+      'Die Sicherung enthält eine ungültige Alarmgruppe.';
+
+  @override
+  String get backupErrorInvalidAlarm =>
+      'Die Sicherung enthält einen ungültigen Alarmeintrag.';
+
+  @override
+  String get backupErrorDuplicateAlarm =>
+      'Die Sicherung enthält eine doppelte Alarm-ID.';
+
+  @override
+  String get backupErrorInvalidSettings =>
+      'Die Sicherung enthält eine ungültige App-Einstellung.';
+
+  @override
+  String get backupErrorInvalidSleep =>
+      'Die Sicherung enthält eine ungültige Schlafeinstellung.';
+
+  @override
+  String get backupErrorInvalidCity =>
+      'Die Sicherung enthält eine ungültige Weltzeituhr.';
+
+  @override
+  String get skipNext => 'Nächsten überspringen';
+
+  @override
+  String skipNextSuccess(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Das nächste Klingeln von $count Alarmen wird übersprungen.',
+      one: 'Das nächste Klingeln wird übersprungen.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipNextNothing =>
+      'Es gibt kein bevorstehendes Klingeln zum Überspringen.';
+
+  @override
+  String get nextSkipped => 'Nächster übersprungen';
+
+  @override
+  String get clearSkip => 'Zeitplan fortsetzen';
+
+  @override
+  String get customVolume => 'Eigene Lautstärke';
+
+  @override
+  String get customVolumeSubtitle =>
+      'Diesen Alarm mit eigener Lautstärke statt der App-Lautstärke abspielen';
+
+  @override
+  String get mathDifficulty => 'Rechenschwierigkeit';
+
+  @override
+  String get mathEasy => 'Leicht';
+
+  @override
+  String get mathMedium => 'Mittel';
+
+  @override
+  String get mathHard => 'Schwer';
+
+  @override
+  String get quickAlarm => 'Schnellalarm';
+
+  @override
+  String get quickAlarmSubtitle =>
+      'Nach einer festgelegten Anzahl Minuten wecken. Der Alarm löscht sich nach dem Klingeln selbst.';
+
+  @override
+  String quickAlarmSet(String time) {
+    return 'Schnellalarm für $time gestellt.';
+  }
+
+  @override
+  String get dynamicColor => 'Hintergrundfarben';
+
+  @override
+  String get dynamicColorSubtitle =>
+      'Die Android-Systempalette verwenden (ab Android 12)';
+
+  @override
+  String get statistics => 'Statistik';
+
+  @override
+  String get statsEmptyTitle => 'Noch kein Verlauf';
+
+  @override
+  String get statsEmptyMessage =>
+      'Sobald deine Alarme klingeln, erscheinen hier ihre Zahlen.';
+
+  @override
+  String lastDays(int count) {
+    return '$count Tage';
+  }
+
+  @override
+  String get statsRang => 'Geklingelt';
+
+  @override
+  String get statsSnoozed => 'Verschoben';
+
+  @override
+  String get statsDismissed => 'Beendet';
+
+  @override
+  String get statsAutoSilenced => 'Automatisch stumm';
+
+  @override
+  String get statsSnoozePerAlarm => 'Schlummern pro Alarm';
+
+  @override
+  String get statsSnoozePerAlarmHint =>
+      'Durchschnittliche Anzahl Schlummer pro Alarmklingeln.';
+
+  @override
+  String get statsByAlarm => 'Nach Alarm';
+
+  @override
+  String get statsBusiestDays => 'Aktivste Tage';
+
+  @override
+  String statsAlarmBreakdown(int rang, int snoozed) {
+    return '$rang-mal geklingelt, $snoozed-mal verschoben';
+  }
+
+  @override
+  String get autoBackup => 'Automatische Sicherung';
+
+  @override
+  String get autoBackupSubtitle =>
+      'Einmal pro Woche eine Kopie in einen selbst gewählten Ordner schreiben';
+
+  @override
+  String get autoBackupChooseFolder => 'Ordner wählen';
+
+  @override
+  String get autoBackupOff => 'Aus';
+
+  @override
+  String get autoBackupNever => 'Noch nicht geschrieben';
+
+  @override
+  String autoBackupLast(String date) {
+    return 'Letzte Kopie: $date';
+  }
+
+  @override
+  String get autoBackupFolderFailed =>
+      'Der Ordner konnte nicht gewählt werden.';
+
+  @override
+  String get timerEmptyTitle => 'Keine laufenden Timer';
+
+  @override
+  String get timerEmptyMessage =>
+      'Wähle oben eine Dauer, um einen zu starten. Mehrere gleichzeitig sind möglich.';
 }

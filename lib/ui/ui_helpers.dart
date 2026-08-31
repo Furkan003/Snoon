@@ -3,43 +3,12 @@ import 'package:intl/intl.dart';
 
 import '../l10n/l10n.dart';
 
-const weekdayShort = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
-const weekdayLong = [
-  'Pazartesi',
-  'Salı',
-  'Çarşamba',
-  'Perşembe',
-  'Cuma',
-  'Cumartesi',
-  'Pazar',
-];
-const monthNames = [
-  'Ocak',
-  'Şubat',
-  'Mart',
-  'Nisan',
-  'Mayıs',
-  'Haziran',
-  'Temmuz',
-  'Ağustos',
-  'Eylül',
-  'Ekim',
-  'Kasım',
-  'Aralık',
-];
-
 String twoDigits(int value) => value.toString().padLeft(2, '0');
 String clockText(int hour, int minute) =>
     '${twoDigits(hour)}:${twoDigits(minute)}';
 
 String rangeClockText(int minutes) =>
     clockText((minutes ~/ 60) % 24, minutes % 60);
-
-String shortDate(DateTime date) =>
-    '${date.day} ${monthNames[date.month - 1]} ${date.year}';
-
-String dateTimeText(DateTime date) =>
-    '${shortDate(date)} • ${clockText(date.hour, date.minute)}';
 
 String weekdayShortLocalized(BuildContext context, int mondayBasedIndex) {
   final locale = Localizations.localeOf(context).toLanguageTag();
@@ -54,16 +23,6 @@ String shortDateLocalized(BuildContext context, DateTime date) {
 String dateTimeTextLocalized(BuildContext context, DateTime date) {
   final locale = Localizations.localeOf(context).toLanguageTag();
   return '${DateFormat.yMMMd(locale).format(date)} • ${DateFormat.Hm(locale).format(date)}';
-}
-
-String repeatSummary(List<int> days) {
-  if (days.isEmpty) return 'Bir kez';
-  if (days.length == 7) return 'Her gün';
-  if (days.length == 5 && [1, 2, 3, 4, 5].every(days.contains)) {
-    return 'Hafta içi';
-  }
-  if (days.length == 2 && [6, 7].every(days.contains)) return 'Hafta sonu';
-  return days.map((day) => weekdayShort[day - 1]).join(', ');
 }
 
 String repeatSummaryLocalized(BuildContext context, List<int> days) {

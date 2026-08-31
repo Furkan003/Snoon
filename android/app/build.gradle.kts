@@ -72,6 +72,18 @@ kotlin {
     }
 }
 
+dependencies {
+    // Needed to create and overwrite a file inside the folder the user grants
+    // for automatic backups.
+    implementation("androidx.documentfile:documentfile:1.1.0")
+
+    testImplementation("junit:junit:4.13.2")
+    // AlarmScheduler reads records through org.json. The stubbed android.jar on
+    // the unit test classpath throws from every one of its methods, so the real
+    // implementation has to be supplied here.
+    testImplementation("org.json:json:20240303")
+}
+
 flutter {
     source = "../.."
 }

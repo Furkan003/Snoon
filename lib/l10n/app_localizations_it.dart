@@ -773,4 +773,183 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get sameStartEndError =>
       'L\'ora di inizio e fine non possono coincidere.';
+
+  @override
+  String get defaultAlarmRingtone => 'Suono sveglia di sistema';
+
+  @override
+  String get defaultTimerRingtone => 'Suono timer di sistema';
+
+  @override
+  String get backupErrorInvalidFormat => 'Il formato del backup non è valido.';
+
+  @override
+  String get backupErrorUnsupportedFile =>
+      'Questo file non è un backup di Snoon supportato.';
+
+  @override
+  String get backupErrorCorruptContent =>
+      'Il contenuto del backup è danneggiato o incompleto.';
+
+  @override
+  String get backupErrorInvalidGroup =>
+      'Il backup contiene un gruppo di sveglie non valido.';
+
+  @override
+  String get backupErrorInvalidAlarm =>
+      'Il backup contiene una sveglia non valida.';
+
+  @override
+  String get backupErrorDuplicateAlarm =>
+      'Il backup contiene un ID sveglia duplicato.';
+
+  @override
+  String get backupErrorInvalidSettings =>
+      'Il backup contiene un\'impostazione dell\'app non valida.';
+
+  @override
+  String get backupErrorInvalidSleep =>
+      'Il backup contiene un\'impostazione del sonno non valida.';
+
+  @override
+  String get backupErrorInvalidCity =>
+      'Il backup contiene un orologio mondiale non valido.';
+
+  @override
+  String get skipNext => 'Salta la prossima';
+
+  @override
+  String skipNextSuccess(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'La prossima suoneria di $count sveglie verrà saltata.',
+      one: 'La prossima suoneria verrà saltata.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipNextNothing => 'Non ci sono suonerie in arrivo da saltare.';
+
+  @override
+  String get nextSkipped => 'Prossima saltata';
+
+  @override
+  String get clearSkip => 'Riprendi la pianificazione';
+
+  @override
+  String get customVolume => 'Volume personalizzato';
+
+  @override
+  String get customVolumeSubtitle =>
+      'Suona questa sveglia al suo livello invece che al volume dell\'app';
+
+  @override
+  String get mathDifficulty => 'Difficoltà del calcolo';
+
+  @override
+  String get mathEasy => 'Facile';
+
+  @override
+  String get mathMedium => 'Media';
+
+  @override
+  String get mathHard => 'Difficile';
+
+  @override
+  String get quickAlarm => 'Sveglia rapida';
+
+  @override
+  String get quickAlarmSubtitle =>
+      'Svegliami tra alcuni minuti. La sveglia si elimina da sola dopo aver suonato.';
+
+  @override
+  String quickAlarmSet(String time) {
+    return 'Sveglia rapida impostata per le $time.';
+  }
+
+  @override
+  String get dynamicColor => 'Colori dello sfondo';
+
+  @override
+  String get dynamicColorSubtitle =>
+      'Usa la tavolozza di sistema Android (Android 12 e successivi)';
+
+  @override
+  String get statistics => 'Statistiche';
+
+  @override
+  String get statsEmptyTitle => 'Ancora nessuna cronologia';
+
+  @override
+  String get statsEmptyMessage =>
+      'Quando le sveglie inizieranno a suonare, qui vedrai i loro numeri.';
+
+  @override
+  String lastDays(int count) {
+    return '$count giorni';
+  }
+
+  @override
+  String get statsRang => 'Suonata';
+
+  @override
+  String get statsSnoozed => 'Posticipata';
+
+  @override
+  String get statsDismissed => 'Disattivata';
+
+  @override
+  String get statsAutoSilenced => 'Silenziata da sola';
+
+  @override
+  String get statsSnoozePerAlarm => 'Rinvii per sveglia';
+
+  @override
+  String get statsSnoozePerAlarmHint =>
+      'Numero medio di rinvii ogni volta che una sveglia suona.';
+
+  @override
+  String get statsByAlarm => 'Per sveglia';
+
+  @override
+  String get statsBusiestDays => 'Giorni più intensi';
+
+  @override
+  String statsAlarmBreakdown(int rang, int snoozed) {
+    return 'Suonata $rang volte, posticipata $snoozed volte';
+  }
+
+  @override
+  String get autoBackup => 'Backup automatico';
+
+  @override
+  String get autoBackupSubtitle =>
+      'Scrivi una copia in una cartella a tua scelta, una volta a settimana';
+
+  @override
+  String get autoBackupChooseFolder => 'Scegli cartella';
+
+  @override
+  String get autoBackupOff => 'Disattivato';
+
+  @override
+  String get autoBackupNever => 'Non ancora scritto';
+
+  @override
+  String autoBackupLast(String date) {
+    return 'Ultima copia: $date';
+  }
+
+  @override
+  String get autoBackupFolderFailed =>
+      'Non è stato possibile scegliere la cartella.';
+
+  @override
+  String get timerEmptyTitle => 'Nessun timer in corso';
+
+  @override
+  String get timerEmptyMessage =>
+      'Scegli una durata qui sopra per iniziare. Puoi averne più di uno alla volta.';
 }

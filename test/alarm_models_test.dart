@@ -222,6 +222,75 @@ void main() {
       expect(next, DateTime(2026, 8, 18, 0, 5));
     });
 
+    test('bitişi başlangıçtan önce olan aralık tek sefer çalar', () {
+      // AlarmScheduler.nextTrigger coerces the same case on the Android side;
+      // see AlarmSchedulerNextTriggerTest.
+      const alarm = AlarmItem(
+        id: 'broken-range',
+        hour: 7,
+        minute: 0,
+        label: 'Bozuk aralık',
+        repeatDays: [1, 2, 3, 4, 5, 6, 7],
+        rangeEndMinutes: 6 * 60,
+      );
+
+      expect(alarm.isRange, isFalse);
+      expect(
+        alarm.nextOccurrence(from: DateTime(2026, 8, 16, 6)),
+        DateTime(2026, 8, 16, 7),
+      );
+    });
+
+    test('gece yarısını geçen kaydırma sonraki güne taşınır', () {
+      // The shift moves the wall-clock minute rather than the absolute instant,
+      // matching AlarmScheduler.nextTrigger.
+      const alarm = AlarmItem(
+        id: 'shift-past-midnight',
+        hour: 23,
+        minute: 30,
+        label: 'Kaydırılan',
+        repeatDays: [1, 2, 3, 4, 5, 6, 7],
+        todayShiftDate: '2026-08-16',
+        todayShiftMinutes: 60,
+      );
+
+      expect(
+        alarm.nextOccurrence(from: DateTime(2026, 8, 16, 23)),
+        DateTime(2026, 8, 17, 0, 30),
+      );
+    });
+
+    test('atlanan tarih bir sonraki çalmaya kaydırır', () {
+      const alarm = AlarmItem(
+        id: 'skipped',
+        hour: 7,
+        minute: 0,
+        label: 'Atlanan',
+        repeatDays: [1, 2, 3, 4, 5, 6, 7],
+        skippedDates: ['2026-08-17'],
+      );
+
+      expect(
+        alarm.nextOccurrence(from: DateTime(2026, 8, 16, 8)),
+        DateTime(2026, 8, 18, 7),
+      );
+    });
+
+    test('geçmiş atlama kayıtları budanır', () {
+      const alarm = AlarmItem(
+        id: 'prune',
+        hour: 7,
+        minute: 0,
+        label: 'Budama',
+        repeatDays: [1, 2, 3, 4, 5, 6, 7],
+        skippedDates: ['2026-08-10', '2026-08-16', '2026-08-20'],
+      );
+
+      final pruned = alarm.withPrunedSkips(from: DateTime(2026, 8, 16, 9));
+
+      expect(pruned.skippedDates, ['2026-08-16', '2026-08-20']);
+    });
+
     test('alarm ve grup tatilleri içinden en uzun olanı uygular', () {
       final alarm = AlarmItem(
         id: 'double-pause',

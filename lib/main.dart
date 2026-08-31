@@ -23,7 +23,13 @@ Future<void> main() async {
   );
   final store = AppStore();
   await store.load();
+  await store.loadDynamicColor();
   runApp(SnoonApp(store: store));
+  // Re-registering every alarm with Android costs one platform-channel round
+  // trip each, so it runs after the first frame instead of delaying start-up.
+  WidgetsBinding.instance.addPostFrameCallback(
+    (_) => store.syncDeliveryQueue(),
+  );
 }
 
 class SnoonApp extends StatelessWidget {
@@ -33,60 +39,65 @@ class SnoonApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: store,
-      builder: (context, _) => MaterialApp(
-        debugShowCheckedModeBanner: false,
-        onGenerateTitle: (context) => AppLocalizations.of(context).appName,
-        locale: Locale(store.localeCode),
-        supportedLocales: AppLocalizations.supportedLocales,
-        localizationsDelegates: const [
-          AppLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        themeMode: switch (store.settings.themeMode) {
-          SnoonThemeMode.system => ThemeMode.system,
-          SnoonThemeMode.dark => ThemeMode.dark,
-          SnoonThemeMode.light => ThemeMode.light,
-        },
-        builder: (context, child) {
-          final dark = Theme.of(context).brightness == Brightness.dark;
-          return AnnotatedRegion<SystemUiOverlayStyle>(
-            value: SystemUiOverlayStyle(
-              statusBarColor: Colors.transparent,
-              statusBarIconBrightness: dark
-                  ? Brightness.light
-                  : Brightness.dark,
-              systemNavigationBarColor: dark
-                  ? const Color(0xFF0A0B10)
-                  : const Color(0xFFF6F5FA),
-              systemNavigationBarIconBrightness: dark
-                  ? Brightness.light
-                  : Brightness.dark,
-            ),
-            child: SafeArea(
-              top: false,
-              left: false,
-              right: false,
-              bottom: true,
-              child: child ?? const SizedBox.shrink(),
-            ),
-          );
-        },
-        theme: _theme(Brightness.light),
-        darkTheme: _theme(Brightness.dark),
-        home: store.languageSelected
-            ? HomeShell(store: store)
-            : LanguageSelectionPage(store: store),
-      ),
+    return AnimatedBuilder(animation: store, builder: (context, _) => _app());
+  }
+
+  Widget _app() {
+    // Android 12+ exposes its wallpaper palette as a system colour; seeding
+    // from it keeps the app's own surfaces while picking up the accent.
+    final seed = store.settings.dynamicColor && store.dynamicSeedColor != null
+        ? Color(store.dynamicSeedColor!)
+        : null;
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      onGenerateTitle: (context) => AppLocalizations.of(context).appName,
+      locale: Locale(store.localeCode),
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      themeMode: switch (store.settings.themeMode) {
+        SnoonThemeMode.system => ThemeMode.system,
+        SnoonThemeMode.dark => ThemeMode.dark,
+        SnoonThemeMode.light => ThemeMode.light,
+      },
+      builder: (context, child) {
+        final dark = Theme.of(context).brightness == Brightness.dark;
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          value: SystemUiOverlayStyle(
+            statusBarColor: Colors.transparent,
+            statusBarIconBrightness: dark ? Brightness.light : Brightness.dark,
+            systemNavigationBarColor: dark
+                ? const Color(0xFF0A0B10)
+                : const Color(0xFFF6F5FA),
+            systemNavigationBarIconBrightness: dark
+                ? Brightness.light
+                : Brightness.dark,
+          ),
+          child: SafeArea(
+            top: false,
+            left: false,
+            right: false,
+            bottom: true,
+            child: child ?? const SizedBox.shrink(),
+          ),
+        );
+      },
+      theme: _theme(Brightness.light, seed),
+      darkTheme: _theme(Brightness.dark, seed),
+      home: store.languageSelected
+          ? HomeShell(store: store)
+          : LanguageSelectionPage(store: store),
     );
   }
 
-  ThemeData _theme(Brightness brightness) {
+  ThemeData _theme(Brightness brightness, Color? seed) {
     final dark = brightness == Brightness.dark;
-    final primary = dark ? const Color(0xFFA78BFA) : const Color(0xFF6542B5);
+    final primary =
+        seed ?? (dark ? const Color(0xFFA78BFA) : const Color(0xFF6542B5));
     final background = dark ? const Color(0xFF0A0B10) : const Color(0xFFF6F5FA);
     final surface = dark ? const Color(0xFF15171F) : Colors.white;
     final scheme = ColorScheme.fromSeed(

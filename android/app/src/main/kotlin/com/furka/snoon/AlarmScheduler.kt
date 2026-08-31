@@ -4,7 +4,6 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.Instant
@@ -235,24 +234,57 @@ object AlarmScheduler {
         }
     }
 
+    /**
+     * Earliest upcoming trigger across every stored alarm, or `null` when none
+     * is pending. Used by the home-screen widget and the quick settings tile,
+     * which read the same records the scheduler works from.
+     */
+    fun nextAlarm(context: Context): Pair<String, Long>? {
+        val now = System.currentTimeMillis()
+        var best: Pair<String, Long>? = null
+        allRecords(context).forEach { record ->
+            if (record.optBoolean("isTimer", false)) return@forEach
+            if (record.optBoolean("isSleepReminder", false)) return@forEach
+            val snooze = record.optLong(SNOOZE_TRIGGER, 0L)
+            val trigger = if (snooze > now) {
+                snooze
+            } else {
+                record.optLong("triggerAtMillis", 0L)
+                    .takeIf { it > now }
+                    ?: nextTrigger(record, now)
+                    ?: return@forEach
+            }
+            if (best == null || trigger < best.second) {
+                best = record.optString("label", "") to trigger
+            }
+        }
+        return best
+    }
+
     fun nextTrigger(record: JSONObject, afterMillis: Long): Long? {
         val zone = ZoneId.systemDefault()
         val after = Instant.ofEpochMilli(afterMillis).atZone(zone)
         val afterDate = after.toLocalDate()
         val days = record.optJSONArray("repeatDays") ?: JSONArray()
-        val oneShotDate = record.optString("oneShotDate", "")
+        val oneShotDate = record.optDateString("oneShotDate")
         val excluded = record.optJSONArray("excludedDates") ?: JSONArray()
+        val skipped = record.optJSONArray("skippedDates") ?: JSONArray()
         val excludedSet = buildSet {
             for (index in 0 until excluded.length()) add(excluded.optString(index))
+            // Dates the user chose to skip once, without disabling the alarm.
+            for (index in 0 until skipped.length()) add(skipped.optString(index))
         }
-        val alarmPause = parseDate(record.optString("pausedUntil", ""))
-        val groupPause = parseDate(record.optString("groupPausedUntil", ""))
+        val alarmPause = parseDate(record.optDateString("pausedUntil"))
+        val groupPause = parseDate(record.optDateString("groupPausedUntil"))
         val pauseUntil = listOfNotNull(alarmPause, groupPause).maxOrNull()
         val startMinutes = record.optInt("hour", 7) * 60 + record.optInt("minute", 0)
+        // AlarmItem.isRange on the Dart side only treats an end past the start
+        // as a range. Coercing here keeps a malformed record ringing once
+        // instead of skipping the candidate loop and never firing at all.
         val endMinutes = if (record.isNull("rangeEndMinutes")) {
             startMinutes
         } else {
-            record.optInt("rangeEndMinutes", startMinutes)
+            record.optInt("rangeEndMinutes", startMinutes).coerceAtLeast(startMinutes)
         }
         val interval = record.optInt("intervalMinutes", 5).coerceAtLeast(1)
 
@@ -267,15 +299,15 @@ object AlarmScheduler {
                     if (days.optInt(index) == scheduleDate.dayOfWeek.value) matches = true
                 }
                 if (!matches) continue
-            } else if (oneShotDate.isNotEmpty() && scheduleDate.toString() != oneShotDate) {
+            } else if (oneShotDate != null && scheduleDate.toString() != oneShotDate) {
                 continue
             }
 
             var shift = 0
-            if (record.optString("alarmShiftDate", "") == scheduleDate.toString()) {
+            if (record.optDateString("alarmShiftDate") == scheduleDate.toString()) {
                 shift += record.optInt("alarmShiftMinutes", 0)
             }
-            if (record.optString("groupShiftDate", "") == scheduleDate.toString()) {
+            if (record.optDateString("groupShiftDate") == scheduleDate.toString()) {
                 shift += record.optInt("groupShiftMinutes", 0)
             }
             var minute = startMinutes
@@ -296,8 +328,21 @@ object AlarmScheduler {
         return null
     }
 
-    private fun parseDate(value: String): LocalDate? = try {
-        if (value.isBlank()) null else LocalDate.parse(value.take(10))
+    /**
+     * Reads an optional `yyyy-MM-dd` field.
+     *
+     * A field the Dart side sent as `null` arrives as [JSONObject.NULL], and
+     * `optString` renders that as the literal string "null" on Android while
+     * returning the fallback under the reference org.json build. Going through
+     * [JSONObject.isNull] keeps both behaving the same.
+     */
+    private fun JSONObject.optDateString(key: String): String? {
+        if (isNull(key)) return null
+        return optString(key, "").takeIf(String::isNotBlank)
+    }
+
+    private fun parseDate(value: String?): LocalDate? = try {
+        if (value.isNullOrBlank()) null else LocalDate.parse(value.take(10))
     } catch (_: Exception) {
         null
     }
@@ -313,11 +358,7 @@ object AlarmScheduler {
             )
             manager.setAlarmClock(AlarmManager.AlarmClockInfo(trigger, showIntent), operation)
         } catch (_: SecurityException) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, trigger, operation)
-            } else {
-                manager.set(AlarmManager.RTC_WAKEUP, trigger, operation)
-            }
+            manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, trigger, operation)
         }
     }
 
@@ -399,9 +440,7 @@ object AlarmScheduler {
         .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     private fun storageContext(context: Context): Context {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N || context.isDeviceProtectedStorage) {
-            return context
-        }
+        if (context.isDeviceProtectedStorage) return context
         val deviceContext = context.createDeviceProtectedStorageContext()
         try {
             deviceContext.moveSharedPreferencesFrom(context, PREFS)
@@ -432,7 +471,7 @@ object AlarmScheduler {
         prefs(context).edit().putString(RECORDS, records.toString()).apply()
     }
 
-    private fun allRecords(context: Context): List<JSONObject> {
+    fun allRecords(context: Context): List<JSONObject> {
         val records = recordMap(context)
         return records.keys().asSequence().mapNotNull(records::optJSONObject).toList()
     }

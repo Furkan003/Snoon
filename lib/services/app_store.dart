@@ -9,6 +9,27 @@ import '../models/alarm_models.dart';
 import '../l10n/l10n.dart';
 import 'native_alarm_service.dart';
 
+/// Why a backup file was rejected. The UI maps these to localized messages.
+enum BackupIssue {
+  invalidFormat,
+  unsupportedFile,
+  corruptContent,
+  invalidGroup,
+  invalidAlarm,
+  duplicateAlarm,
+  invalidSettings,
+  invalidSleep,
+  invalidCity,
+}
+
+/// Extends [FormatException] so existing callers that only care about a
+/// malformed backup keep working, while [issue] carries the localizable cause.
+class BackupFormatException extends FormatException {
+  const BackupFormatException(this.issue) : super('');
+
+  final BackupIssue issue;
+}
+
 class AppStore extends ChangeNotifier {
   AppStore({NativeAlarmService? native})
     : native = native ?? NativeAlarmService();
@@ -24,6 +45,8 @@ class AppStore extends ChangeNotifier {
   static const _groupsInitializedKey = 'groups_initialized_v1';
   static const _citiesInitializedKey = 'cities_initialized_v1';
   static const _timerStateKey = 'timer_state_v1';
+  static const _timersKey = 'timers_v1';
+  static const _stopwatchKey = 'stopwatch_v1';
   static const supportedLanguageCodes = {
     'tr',
     'en',
@@ -48,11 +71,26 @@ class AppStore extends ChangeNotifier {
   bool languageSelected = false;
   String? lastNativeError;
 
-  String? timerId;
-  int timerSelectedSeconds = 5 * 60;
-  int timerRemainingSeconds = 5 * 60;
-  DateTime? timerTarget;
-  bool timerRunning = false;
+  /// Wallpaper accent reported by Android 12+, or `null` on older releases.
+  int? dynamicSeedColor;
+  bool _sleepReminderNeedsSync = false;
+
+  /// Elapsed time already banked before the current run.
+  Duration stopwatchBase = Duration.zero;
+
+  /// When the running segment started, or `null` while paused.
+  DateTime? stopwatchStartedAt;
+  List<Duration> stopwatchLaps = [];
+
+  bool get stopwatchRunning => stopwatchStartedAt != null;
+
+  Duration get stopwatchElapsed => stopwatchStartedAt == null
+      ? stopwatchBase
+      : stopwatchBase + DateTime.now().difference(stopwatchStartedAt!);
+
+  /// Every countdown the user has going. The native layer schedules by id, so
+  /// more than one can run at a time.
+  List<TimerItem> timers = [];
 
   String newId(String prefix) =>
       '$prefix-${DateTime.now().microsecondsSinceEpoch}';
@@ -68,7 +106,10 @@ class AppStore extends ChangeNotifier {
         ? deviceCode
         : 'en';
     languageSelected = _prefs.getBool(_languageSelectedKey) ?? false;
-    alarms = _decodeList(_alarmsKey, AlarmItem.fromJson);
+    alarms = _decodeList(
+      _alarmsKey,
+      AlarmItem.fromJson,
+    ).map((alarm) => alarm.withPrunedSkips()).toList();
     groups = _decodeList(_groupsKey, AlarmGroup.fromJson);
     history = _decodeList(_historyKey, AlarmHistoryEvent.fromJson);
     cities = _decodeList(_citiesKey, WorldCity.fromJson);
@@ -129,44 +170,116 @@ class AppStore extends ChangeNotifier {
       }
     }
 
-    final rawTimer = _prefs.getString(_timerStateKey);
-    if (rawTimer != null) {
-      try {
-        final timer = Map<String, dynamic>.from(jsonDecode(rawTimer) as Map);
-        timerId = timer['id'] as String?;
-        timerSelectedSeconds = (timer['selectedSeconds'] as int? ?? 5 * 60)
-            .clamp(1, 7 * 86400);
-        timerRemainingSeconds =
-            (timer['remainingSeconds'] as int? ?? timerSelectedSeconds).clamp(
-              0,
-              7 * 86400,
-            );
-        timerRunning = timer['running'] as bool? ?? false;
-        timerTarget = DateTime.tryParse(timer['target']?.toString() ?? '');
-        if (timerRunning && timerTarget != null) {
-          timerRemainingSeconds = timerTarget!
-              .difference(DateTime.now())
-              .inSeconds
-              .clamp(0, 7 * 86400);
-          if (timerRemainingSeconds <= 0) {
-            await clearTimerState();
-          }
-        } else {
-          timerRunning = false;
-          timerTarget = null;
+    timers = _decodeList(_timersKey, TimerItem.fromJson);
+    if (!_prefs.containsKey(_timersKey)) {
+      // Migrate the single countdown written by builds before 1.2.
+      final rawTimer = _prefs.getString(_timerStateKey);
+      if (rawTimer != null) {
+        try {
+          final legacy = Map<String, dynamic>.from(jsonDecode(rawTimer) as Map);
+          final total = (legacy['selectedSeconds'] as int? ?? 300).clamp(
+            1,
+            7 * 86400,
+          );
+          timers = [
+            TimerItem(
+              id: legacy['id'] as String? ?? newId('timer'),
+              label: '',
+              totalSeconds: total,
+              remainingSeconds: (legacy['remainingSeconds'] as int? ?? total)
+                  .clamp(0, 7 * 86400),
+              target: legacy['running'] == true
+                  ? DateTime.tryParse(legacy['target']?.toString() ?? '')
+                  : null,
+            ),
+          ];
+        } catch (_) {
+          timers = [];
         }
+      }
+      await _prefs.remove(_timerStateKey);
+      await _persistTimers();
+    }
+    // Drop countdowns that ran out while the app was closed.
+    timers = timers
+        .where((timer) => timer.target == null || timer.secondsLeft() > 0)
+        .toList();
+
+    final rawStopwatch = _prefs.getString(_stopwatchKey);
+    if (rawStopwatch != null) {
+      try {
+        final data = Map<String, dynamic>.from(jsonDecode(rawStopwatch) as Map);
+        stopwatchBase = Duration(
+          milliseconds: (data['baseMillis'] as int? ?? 0).clamp(0, 1 << 40),
+        );
+        stopwatchStartedAt = DateTime.tryParse(
+          data['startedAt']?.toString() ?? '',
+        );
+        stopwatchLaps = [
+          for (final lap in data['laps'] as List? ?? const [])
+            Duration(milliseconds: (lap as num).toInt()),
+        ];
       } catch (_) {
-        await clearTimerState();
+        await clearStopwatch();
       }
     }
 
     await _safeNative(() => native.setApplicationLocale(localeCode));
 
     await _consumeNativeHistory();
+    _sleepReminderNeedsSync = rawSleep != null;
     ready = true;
     notifyListeners();
+  }
+
+  /// Reads the Android 12+ wallpaper accent.
+  ///
+  /// Deliberately kept out of [load]: a platform-channel call that is awaited
+  /// before the first pump deadlocks `testWidgets`, and the palette is not
+  /// needed to build correct state. `main` calls it once at start-up.
+  Future<void> loadDynamicColor() async {
+    await _safeNative(() async {
+      dynamicSeedColor = await native.dynamicColorSeed();
+    });
+  }
+
+  /// Writes an automatic backup when one is due.
+  ///
+  /// Runs on launch rather than on a timer: a weekly cadence needs no scheduler
+  /// when the check is "is the last copy older than a week?".
+  Future<void> runAutoBackupIfDue({
+    Duration every = const Duration(days: 7),
+  }) async {
+    final folder = settings.autoBackupFolder;
+    if (folder == null) return;
+    final last = settings.lastAutoBackupAt;
+    if (last != null && DateTime.now().difference(last) < every) return;
+    try {
+      final json = await createBackupJson();
+      final written = await native.writeAutoBackup(treeUri: folder, json: json);
+      if (!written) return;
+      settings = settings.copyWith(lastAutoBackupAt: DateTime.now());
+      await _prefs.setString(_settingsKey, jsonEncode(settings.toJson()));
+      notifyListeners();
+    } on MissingPluginException {
+      // Non-Android previews have no folder to write to.
+    } on PlatformException {
+      // A revoked folder grant must not break start-up.
+    }
+  }
+
+  /// Pushes every stored alarm back to the Android scheduler.
+  ///
+  /// Kept out of [load] because it costs one platform-channel round trip per
+  /// alarm; `main` runs it after the first frame so a large alarm list no
+  /// longer delays start-up.
+  Future<void> syncDeliveryQueue() async {
     await rescheduleAll();
-    if (rawSleep != null) await _scheduleSleepReminder(sleepProfile);
+    await runAutoBackupIfDue();
+    if (_sleepReminderNeedsSync) {
+      _sleepReminderNeedsSync = false;
+      await _scheduleSleepReminder(sleepProfile);
+    }
   }
 
   Future<void> selectLanguage({
@@ -311,6 +424,41 @@ class AppStore extends ChangeNotifier {
     await _rescheduleIds(idSet);
   }
 
+  /// Drops the next occurrence of each alarm without disabling it. Returns the
+  /// ids that actually had an occurrence left to skip.
+  Future<Set<String>> skipNextOccurrence(Iterable<String> ids) async {
+    final idSet = ids.toSet();
+    final skipped = <String>{};
+    alarms = [
+      for (final alarm in alarms)
+        if (!idSet.contains(alarm.id))
+          alarm
+        else
+          () {
+            final next = alarm.nextOccurrence(group: groupFor(alarm.groupId));
+            if (next == null) return alarm;
+            final key = dateKey(next);
+            if (alarm.skippedDates.contains(key)) return alarm;
+            skipped.add(alarm.id);
+            return alarm
+                .copyWith(skippedDates: [...alarm.skippedDates, key])
+                .withPrunedSkips();
+          }(),
+    ];
+    if (skipped.isEmpty) return skipped;
+    await _persistAlarms();
+    notifyListeners();
+    await _rescheduleIds(skipped);
+    return skipped;
+  }
+
+  /// Clears every pending skip so the alarm resumes its normal schedule.
+  Future<void> clearSkips(String id) async {
+    final alarm = alarms.firstWhere((item) => item.id == id);
+    if (alarm.skippedDates.isEmpty) return;
+    await updateAlarm(alarm.copyWith(skippedDates: const []));
+  }
+
   Future<void> saveGroup(AlarmGroup group) async {
     final exists = groups.any((item) => item.id == group.id);
     groups = exists
@@ -373,37 +521,139 @@ class AppStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> saveTimerState({
-    required String id,
-    required int selectedSeconds,
-    required int remainingSeconds,
-    required bool running,
-    DateTime? target,
-  }) async {
-    timerId = id;
-    timerSelectedSeconds = selectedSeconds.clamp(1, 7 * 86400);
-    timerRemainingSeconds = remainingSeconds.clamp(0, 7 * 86400);
-    timerRunning = running;
-    timerTarget = running ? target : null;
-    await _prefs.setString(
-      _timerStateKey,
-      jsonEncode({
-        'id': timerId,
-        'selectedSeconds': timerSelectedSeconds,
-        'remainingSeconds': timerRemainingSeconds,
-        'running': timerRunning,
-        'target': timerTarget?.toIso8601String(),
-      }),
-    );
+  Future<void> _persistTimers() => _prefs.setString(
+    _timersKey,
+    jsonEncode(timers.map((item) => item.toJson()).toList()),
+  );
+
+  void _replaceTimer(TimerItem timer) {
+    timers = [
+      for (final item in timers)
+        if (item.id == timer.id) timer else item,
+    ];
   }
 
-  Future<void> clearTimerState() async {
-    timerId = null;
-    timerSelectedSeconds = 5 * 60;
-    timerRemainingSeconds = 5 * 60;
-    timerTarget = null;
-    timerRunning = false;
-    await _prefs.remove(_timerStateKey);
+  /// Creates a countdown and starts it straight away, which is what picking a
+  /// duration means in practice.
+  Future<TimerItem?> addTimer({
+    required int seconds,
+    required String label,
+    required String deliveryLabel,
+  }) async {
+    final timer = TimerItem(
+      id: newId('timer'),
+      label: label,
+      totalSeconds: seconds.clamp(1, 7 * 86400),
+      remainingSeconds: seconds.clamp(1, 7 * 86400),
+    );
+    timers = [...timers, timer];
+    await _persistTimers();
+    notifyListeners();
+    return startTimer(timer.id, deliveryLabel: deliveryLabel);
+  }
+
+  Future<TimerItem?> startTimer(
+    String id, {
+    required String deliveryLabel,
+  }) async {
+    final index = timers.indexWhere((item) => item.id == id);
+    if (index < 0) return null;
+    final timer = timers[index];
+    final seconds = timer.secondsLeft() > 0
+        ? timer.secondsLeft()
+        : timer.totalSeconds;
+    final target = DateTime.now().add(Duration(seconds: seconds));
+    final scheduled = await scheduleTimerDelivery(
+      id: timer.id,
+      label: timer.label.isEmpty ? deliveryLabel : timer.label,
+      triggerAtMillis: target.millisecondsSinceEpoch,
+    );
+    if (!scheduled) return null;
+    final started = timer.copyWith(remainingSeconds: seconds, target: target);
+    _replaceTimer(started);
+    await _persistTimers();
+    notifyListeners();
+    return started;
+  }
+
+  Future<void> pauseTimer(String id) async {
+    final index = timers.indexWhere((item) => item.id == id);
+    if (index < 0) return;
+    final timer = timers[index];
+    await cancelTimerDelivery(id);
+    _replaceTimer(
+      timer.copyWith(remainingSeconds: timer.secondsLeft(), target: null),
+    );
+    await _persistTimers();
+    notifyListeners();
+  }
+
+  Future<void> resetTimer(String id) async {
+    final index = timers.indexWhere((item) => item.id == id);
+    if (index < 0) return;
+    final timer = timers[index];
+    await cancelTimerDelivery(id);
+    _replaceTimer(
+      timer.copyWith(remainingSeconds: timer.totalSeconds, target: null),
+    );
+    await _persistTimers();
+    notifyListeners();
+  }
+
+  Future<void> removeTimer(String id) async {
+    await cancelTimerDelivery(id);
+    timers = timers.where((item) => item.id != id).toList();
+    await _persistTimers();
+    notifyListeners();
+  }
+
+  /// Called by the UI when a countdown reaches zero; the native alarm has
+  /// already fired by then.
+  Future<void> expireTimer(String id) async {
+    final index = timers.indexWhere((item) => item.id == id);
+    if (index < 0) return;
+    _replaceTimer(
+      timers[index].copyWith(
+        remainingSeconds: timers[index].totalSeconds,
+        target: null,
+      ),
+    );
+    await _persistTimers();
+    notifyListeners();
+  }
+
+  Future<void> _persistStopwatch() => _prefs.setString(
+    _stopwatchKey,
+    jsonEncode({
+      'baseMillis': stopwatchBase.inMilliseconds,
+      'startedAt': stopwatchStartedAt?.toIso8601String(),
+      'laps': stopwatchLaps.map((lap) => lap.inMilliseconds).toList(),
+    }),
+  );
+
+  Future<void> toggleStopwatch() async {
+    if (stopwatchStartedAt == null) {
+      stopwatchStartedAt = DateTime.now();
+    } else {
+      stopwatchBase = stopwatchElapsed;
+      stopwatchStartedAt = null;
+    }
+    notifyListeners();
+    await _persistStopwatch();
+  }
+
+  Future<void> addStopwatchLap() async {
+    stopwatchLaps = [stopwatchElapsed, ...stopwatchLaps];
+    notifyListeners();
+    await _persistStopwatch();
+  }
+
+  Future<void> clearStopwatch() async {
+    stopwatchBase = Duration.zero;
+    stopwatchStartedAt = null;
+    stopwatchLaps = [];
+    notifyListeners();
+    await _prefs.remove(_stopwatchKey);
   }
 
   Future<bool> scheduleTimerDelivery({
@@ -472,13 +722,11 @@ class AppStore extends ChangeNotifier {
     try {
       final decoded = jsonDecode(raw);
       if (decoded is! Map) {
-        throw const FormatException('Yedek biçimi geçersiz.');
+        throw const BackupFormatException(BackupIssue.invalidFormat);
       }
       root = Map<String, dynamic>.from(decoded);
       if (root['schemaVersion'] != 1 || root['app'] != 'Snoon') {
-        throw const FormatException(
-          'Bu dosya desteklenen bir Snoon yedeği değil.',
-        );
+        throw const BackupFormatException(BackupIssue.unsupportedFile);
       }
 
       List<T> decodeItems<T>(
@@ -486,9 +734,13 @@ class AppStore extends ChangeNotifier {
         T Function(Map<String, dynamic>) parse,
       ) {
         final value = root[key];
-        if (value is! List) throw FormatException('$key listesi eksik.');
+        if (value is! List) {
+          throw const BackupFormatException(BackupIssue.corruptContent);
+        }
         return value.map((item) {
-          if (item is! Map) throw FormatException('$key öğesi geçersiz.');
+          if (item is! Map) {
+            throw const BackupFormatException(BackupIssue.corruptContent);
+          }
           return parse(Map<String, dynamic>.from(item));
         }).toList();
       }
@@ -498,7 +750,7 @@ class AppStore extends ChangeNotifier {
       restoredHistory = decodeItems('history', AlarmHistoryEvent.fromJson);
       restoredCities = decodeItems('cities', WorldCity.fromJson);
       if (root['settings'] is! Map || root['sleepProfile'] is! Map) {
-        throw const FormatException('Yedek ayarları eksik.');
+        throw const BackupFormatException(BackupIssue.corruptContent);
       }
       restoredSettings = AppSettings.fromJson(
         Map<String, dynamic>.from(root['settings'] as Map),
@@ -507,10 +759,11 @@ class AppStore extends ChangeNotifier {
         Map<String, dynamic>.from(root['sleepProfile'] as Map),
       );
       restoredLocale = root['localeCode']?.toString();
-    } on FormatException {
+    } on BackupFormatException {
       rethrow;
     } catch (_) {
-      throw const FormatException('Yedek içeriği bozuk veya eksik.');
+      // Includes the FormatException jsonDecode raises on malformed files.
+      throw const BackupFormatException(BackupIssue.corruptContent);
     }
 
     final groupIds = restoredGroups.map((item) => item.id).toSet();
@@ -523,11 +776,15 @@ class AppStore extends ChangeNotifier {
               ),
         ) ||
         groupIds.length != restoredGroups.length) {
-      throw const FormatException('Yedekte geçersiz alarm grubu var.');
+      throw const BackupFormatException(BackupIssue.invalidGroup);
     }
     if (restoredAlarms.any((alarm) {
       final end = alarm.rangeEndMinutes;
+      final volume = alarm.volume;
       return alarm.id.trim().isEmpty ||
+          (volume != null &&
+              (!volume.isFinite || volume < 0.05 || volume > 1)) ||
+          alarm.skippedDates.any((date) => DateTime.tryParse(date) == null) ||
           !alarm.hour.inRange(0, 23) ||
           !alarm.minute.inRange(0, 59) ||
           alarm.intervalMinutes <= 0 ||
@@ -538,11 +795,11 @@ class AppStore extends ChangeNotifier {
           (end != null &&
               (end <= alarm.startMinutes || end > alarm.startMinutes + 1439));
     })) {
-      throw const FormatException('Yedekte geçersiz alarm kaydı var.');
+      throw const BackupFormatException(BackupIssue.invalidAlarm);
     }
     if (restoredAlarms.map((item) => item.id).toSet().length !=
         restoredAlarms.length) {
-      throw const FormatException('Yedekte yinelenen alarm kimliği var.');
+      throw const BackupFormatException(BackupIssue.duplicateAlarm);
     }
     if (!restoredSettings.alarmVolume.isFinite ||
         restoredSettings.alarmVolume < 0.05 ||
@@ -551,7 +808,7 @@ class AppStore extends ChangeNotifier {
         restoredSettings.snoozeMinutes <= 0 ||
         restoredSettings.maxSnoozes < 0 ||
         restoredSettings.preNotificationMinutes < 0) {
-      throw const FormatException('Yedekte geçersiz uygulama ayarı var.');
+      throw const BackupFormatException(BackupIssue.invalidSettings);
     }
     if (!restoredSleep.bedHour.inRange(0, 23) ||
         !restoredSleep.wakeHour.inRange(0, 23) ||
@@ -559,13 +816,13 @@ class AppStore extends ChangeNotifier {
         !restoredSleep.wakeMinute.inRange(0, 59) ||
         restoredSleep.windDownMinutes <= 0 ||
         restoredSleep.days.any((day) => !day.inRange(1, 7))) {
-      throw const FormatException('Yedekte geçersiz uyku ayarı var.');
+      throw const BackupFormatException(BackupIssue.invalidSleep);
     }
     if (restoredCities.any(
       (city) =>
           city.name.trim().isEmpty || !city.offsetMinutes.inRange(-840, 840),
     )) {
-      throw const FormatException('Yedekte geçersiz dünya saati var.');
+      throw const BackupFormatException(BackupIssue.invalidCity);
     }
 
     await _safeNative(native.cancelAll, reportFailure: true);
@@ -747,6 +1004,7 @@ class AppStore extends ChangeNotifier {
           ? null
           : dateKey(group!.pausedUntil!),
       'excludedDates': group?.excludedDates ?? const <String>[],
+      'skippedDates': alarm.skippedDates,
       'alarmShiftDate': alarm.todayShiftDate,
       'alarmShiftMinutes': alarm.todayShiftMinutes,
       'groupShiftDate': group?.todayShiftDate,
@@ -757,10 +1015,11 @@ class AppStore extends ChangeNotifier {
       'ringtoneUri': alarm.ringtoneUri ?? settings.alarmRingtoneUri,
       'ringtoneName': alarm.ringtoneName ?? settings.alarmRingtoneName,
       'dismissTask': alarm.dismissTask.name,
+      'mathDifficulty': alarm.mathDifficulty.name,
       'morningRoutine': alarm.morningRoutine,
       'gentleReminderMinutes': alarm.gentleReminderMinutes,
       'backupAlarmMinutes': alarm.backupAlarmMinutes,
-      'volume': settings.alarmVolume,
+      'volume': alarm.volume ?? settings.alarmVolume,
       'gradualVolume': settings.gradualVolume,
       'autoSilenceMinutes': settings.autoSilenceMinutes,
       'snoozeMinutes': settings.snoozeMinutes,

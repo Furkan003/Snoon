@@ -1,7 +1,6 @@
 package com.furka.snoon
 
 import android.content.Context
-import android.os.Build
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.Instant
@@ -65,9 +64,7 @@ object HistoryStore {
         .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     private fun storageContext(context: Context): Context {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N || context.isDeviceProtectedStorage) {
-            return context
-        }
+        if (context.isDeviceProtectedStorage) return context
         val deviceContext = context.createDeviceProtectedStorageContext()
         try {
             deviceContext.moveSharedPreferencesFrom(context, PREFS)

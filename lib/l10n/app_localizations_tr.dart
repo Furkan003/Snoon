@@ -720,4 +720,176 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get sameStartEndError => 'Başlangıç ve bitiş saati aynı olamaz.';
+
+  @override
+  String get defaultAlarmRingtone => 'Sistem alarm sesi';
+
+  @override
+  String get defaultTimerRingtone => 'Sistem zamanlayıcı sesi';
+
+  @override
+  String get backupErrorInvalidFormat => 'Yedek biçimi geçersiz.';
+
+  @override
+  String get backupErrorUnsupportedFile =>
+      'Bu dosya desteklenen bir Snoon yedeği değil.';
+
+  @override
+  String get backupErrorCorruptContent => 'Yedek içeriği bozuk veya eksik.';
+
+  @override
+  String get backupErrorInvalidGroup => 'Yedekte geçersiz alarm grubu var.';
+
+  @override
+  String get backupErrorInvalidAlarm => 'Yedekte geçersiz alarm kaydı var.';
+
+  @override
+  String get backupErrorDuplicateAlarm =>
+      'Yedekte yinelenen alarm kimliği var.';
+
+  @override
+  String get backupErrorInvalidSettings =>
+      'Yedekte geçersiz uygulama ayarı var.';
+
+  @override
+  String get backupErrorInvalidSleep => 'Yedekte geçersiz uyku ayarı var.';
+
+  @override
+  String get backupErrorInvalidCity => 'Yedekte geçersiz dünya saati var.';
+
+  @override
+  String get skipNext => 'Sonrakini atla';
+
+  @override
+  String skipNextSuccess(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count alarmın sıradaki çalması atlanacak.',
+      one: 'Sıradaki çalma atlanacak.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipNextNothing => 'Atlanacak yaklaşan bir çalma yok.';
+
+  @override
+  String get nextSkipped => 'Sıradaki atlandı';
+
+  @override
+  String get clearSkip => 'Programa geri dön';
+
+  @override
+  String get customVolume => 'Özel ses düzeyi';
+
+  @override
+  String get customVolumeSubtitle =>
+      'Bu alarmı uygulama ses düzeyi yerine kendi düzeyinde çal';
+
+  @override
+  String get mathDifficulty => 'Matematik zorluğu';
+
+  @override
+  String get mathEasy => 'Kolay';
+
+  @override
+  String get mathMedium => 'Orta';
+
+  @override
+  String get mathHard => 'Zor';
+
+  @override
+  String get quickAlarm => 'Hızlı alarm';
+
+  @override
+  String get quickAlarmSubtitle =>
+      'Belirli bir dakika sonra uyandır. Alarm çaldıktan sonra kendini siler.';
+
+  @override
+  String quickAlarmSet(String time) {
+    return 'Hızlı alarm $time için kuruldu.';
+  }
+
+  @override
+  String get dynamicColor => 'Duvar kağıdı renkleri';
+
+  @override
+  String get dynamicColorSubtitle =>
+      'Android sistem paletini kullan (Android 12 ve sonrası)';
+
+  @override
+  String get statistics => 'İstatistikler';
+
+  @override
+  String get statsEmptyTitle => 'Henüz geçmiş yok';
+
+  @override
+  String get statsEmptyMessage =>
+      'Alarmların çalmaya başlayınca sayıları burada görünecek.';
+
+  @override
+  String lastDays(int count) {
+    return '$count gün';
+  }
+
+  @override
+  String get statsRang => 'Çaldı';
+
+  @override
+  String get statsSnoozed => 'Ertelendi';
+
+  @override
+  String get statsDismissed => 'Kapatıldı';
+
+  @override
+  String get statsAutoSilenced => 'Otomatik susturuldu';
+
+  @override
+  String get statsSnoozePerAlarm => 'Alarm başına erteleme';
+
+  @override
+  String get statsSnoozePerAlarmHint =>
+      'Bir alarm her çaldığında ortalama kaç kez ertelendiği.';
+
+  @override
+  String get statsByAlarm => 'Alarma göre';
+
+  @override
+  String get statsBusiestDays => 'En yoğun günler';
+
+  @override
+  String statsAlarmBreakdown(int rang, int snoozed) {
+    return '$rang kez çaldı, $snoozed kez ertelendi';
+  }
+
+  @override
+  String get autoBackup => 'Otomatik yedek';
+
+  @override
+  String get autoBackupSubtitle => 'Seçtiğin klasöre haftada bir kopya yaz';
+
+  @override
+  String get autoBackupChooseFolder => 'Klasör seç';
+
+  @override
+  String get autoBackupOff => 'Kapalı';
+
+  @override
+  String get autoBackupNever => 'Henüz yazılmadı';
+
+  @override
+  String autoBackupLast(String date) {
+    return 'Son kopya: $date';
+  }
+
+  @override
+  String get autoBackupFolderFailed => 'Klasör seçilemedi.';
+
+  @override
+  String get timerEmptyTitle => 'Çalışan zamanlayıcı yok';
+
+  @override
+  String get timerEmptyMessage =>
+      'Başlatmak için yukarıdan bir süre seç. Aynı anda birden fazla çalıştırabilirsin.';
 }

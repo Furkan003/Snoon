@@ -26,6 +26,8 @@ class _AlarmEditorPageState extends State<AlarmEditorPage> {
   late bool _vibrate;
   late bool _deleteAfter;
   late DismissTask _dismissTask;
+  late MathDifficulty _mathDifficulty;
+  late double? _volume;
   late bool _morningRoutine;
   late int _gentleMinutes;
   late int _backupMinutes;
@@ -54,6 +56,8 @@ class _AlarmEditorPageState extends State<AlarmEditorPage> {
     _morningRoutine = (alarm?.morningRoutine ?? false) && !_isRange;
     _gentleMinutes = alarm?.gentleReminderMinutes ?? 10;
     _backupMinutes = alarm?.backupAlarmMinutes ?? 10;
+    _mathDifficulty = alarm?.mathDifficulty ?? MathDifficulty.easy;
+    _volume = alarm?.volume;
     _ringtoneUri = alarm?.ringtoneUri;
     _ringtoneName = alarm?.ringtoneName;
   }
@@ -124,6 +128,9 @@ class _AlarmEditorPageState extends State<AlarmEditorPage> {
       ringtoneUri: _ringtoneUri,
       ringtoneName: _ringtoneName,
       dismissTask: _dismissTask,
+      mathDifficulty: _mathDifficulty,
+      volume: _volume,
+      skippedDates: previous?.skippedDates ?? const [],
       morningRoutine: _morningRoutine,
       gentleReminderMinutes: _gentleMinutes,
       backupAlarmMinutes: _backupMinutes,
@@ -317,7 +324,9 @@ class _AlarmEditorPageState extends State<AlarmEditorPage> {
                 leading: const Icon(Icons.music_note_outlined),
                 title: Text(l10n.ringtone),
                 subtitle: Text(
-                  _ringtoneName ?? widget.store.settings.alarmRingtoneName,
+                  _ringtoneName ??
+                      widget.store.settings.alarmRingtoneName ??
+                      l10n.defaultAlarmRingtone,
                 ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: _pickRingtone,
@@ -360,6 +369,75 @@ class _AlarmEditorPageState extends State<AlarmEditorPage> {
                 onChanged: (value) =>
                     setState(() => _dismissTask = value ?? DismissTask.none),
               ),
+            ),
+          ),
+          if (_dismissTask == DismissTask.math)
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.calculate_outlined),
+                title: Text(l10n.mathDifficulty),
+                trailing: DropdownButton<MathDifficulty>(
+                  value: _mathDifficulty,
+                  underline: const SizedBox.shrink(),
+                  items: MathDifficulty.values
+                      .map(
+                        (value) => DropdownMenuItem(
+                          value: value,
+                          child: Text(
+                            localizedMathDifficultyLabel(l10n, value),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) => setState(
+                    () => _mathDifficulty = value ?? MathDifficulty.easy,
+                  ),
+                ),
+              ),
+            ),
+          SectionTitle(l10n.alarmVolume),
+          Card(
+            child: Column(
+              children: [
+                SwitchListTile(
+                  secondary: const Icon(Icons.volume_up_outlined),
+                  title: Text(l10n.customVolume),
+                  subtitle: Text(l10n.customVolumeSubtitle),
+                  value: _volume != null,
+                  onChanged: (value) => setState(
+                    () => _volume = value
+                        ? widget.store.settings.alarmVolume
+                        : null,
+                  ),
+                ),
+                if (_volume != null) ...[
+                  const Divider(height: 1),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Slider(
+                            value: _volume!.clamp(0.05, 1),
+                            min: 0.05,
+                            divisions: 19,
+                            label: '${(_volume! * 100).round()}%',
+                            onChanged: (value) =>
+                                setState(() => _volume = value),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 48,
+                          child: Text(
+                            '${(_volume! * 100).round()}%',
+                            textAlign: TextAlign.end,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
           SectionTitle(l10n.morningRoutine),

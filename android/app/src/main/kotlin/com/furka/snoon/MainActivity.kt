@@ -11,7 +11,11 @@ import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
+import android.util.Log
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.IntentCompat
+import androidx.core.net.toUri
+import androidx.documentfile.provider.DocumentFile
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -24,6 +28,13 @@ class MainActivity : FlutterActivity() {
         private const val NOTIFICATION_REQUEST = 8103
         private const val BACKUP_EXPORT_REQUEST = 8104
         private const val BACKUP_IMPORT_REQUEST = 8105
+        private const val BACKUP_FOLDER_REQUEST = 8106
+        private const val AUTO_BACKUP_FILE = "snoon-auto-backup.json"
+
+        // The picker lets the user choose any file. A Snoon backup with the
+        // 300-event history cap stays far below this, so anything larger is
+        // rejected rather than read into memory.
+        private const val MAX_BACKUP_CHARS = 8 * 1024 * 1024
     }
 
     private var ringtoneResult: MethodChannel.Result? = null
@@ -31,6 +42,7 @@ class MainActivity : FlutterActivity() {
     private var backupExportResult: MethodChannel.Result? = null
     private var backupImportResult: MethodChannel.Result? = null
     private var backupJson: String? = null
+    private var backupFolderResult: MethodChannel.Result? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -45,15 +57,18 @@ class MainActivity : FlutterActivity() {
                     "scheduleAlarm" -> {
                         val record = JSONObject(call.arguments as Map<*, *>)
                         AlarmScheduler.schedule(this, record)
+                        NextAlarmWidget.refresh(this)
                         result.success(null)
                     }
                     "cancelAlarm" -> {
                         val id = call.argument<String>("id") ?: ""
                         AlarmScheduler.cancel(this, id)
+                        NextAlarmWidget.refresh(this)
                         result.success(null)
                     }
                     "cancelAll" -> {
                         AlarmScheduler.cancelAll(this)
+                        NextAlarmWidget.refresh(this)
                         result.success(null)
                     }
                     "canScheduleExactAlarms" -> {
@@ -83,15 +98,12 @@ class MainActivity : FlutterActivity() {
                     "alarmNotificationsOperational" -> {
                         val notificationsEnabled =
                             NotificationManagerCompat.from(this).areNotificationsEnabled()
-                        val channelsEnabled = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            val manager = getSystemService(NotificationManager::class.java)
+                        val channelManager = getSystemService(NotificationManager::class.java)
+                        val channelsEnabled =
                             listOf("ringing_alarm", "snoozed_alarm").all { channelId ->
-                                manager.getNotificationChannel(channelId)?.importance !=
+                                channelManager.getNotificationChannel(channelId)?.importance !=
                                     NotificationManager.IMPORTANCE_NONE
                             }
-                        } else {
-                            true
-                        }
                         result.success(notificationsEnabled && channelsEnabled)
                     }
                     "requestNotificationPermission" -> {
@@ -164,6 +176,16 @@ class MainActivity : FlutterActivity() {
                         )
                         result.success(null)
                     }
+                    "dynamicColorSeed" -> {
+                        // The wallpaper palette only exists from Android 12 on.
+                        result.success(
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                getColor(android.R.color.system_accent1_500)
+                            } else {
+                                null
+                            },
+                        )
+                    }
                     "deviceManufacturer" -> result.success(
                         "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}".trim(),
                     )
@@ -226,6 +248,12 @@ class MainActivity : FlutterActivity() {
                         result = result,
                     )
                     "pickBackup" -> pickBackup(result)
+                    "pickBackupFolder" -> pickBackupFolder(result)
+                    "writeAutoBackup" -> writeAutoBackup(
+                        treeUri = call.argument<String>("treeUri") ?: "",
+                        json = call.argument<String>("json") ?: "",
+                        result = result,
+                    )
                     else -> result.notImplemented()
                 }
             }
@@ -302,6 +330,83 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    /**
+     * Asks for a folder and keeps the grant across reboots, so later automatic
+     * backups can write there without prompting again.
+     */
+    private fun pickBackupFolder(result: MethodChannel.Result) {
+        if (backupFolderResult != null) {
+            result.error("backup_busy", "Klasör seçici zaten açık", null)
+            return
+        }
+        backupFolderResult = result
+        try {
+            startActivityForResult(
+                Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+                    addFlags(
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                            Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                            Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION,
+                    )
+                },
+                BACKUP_FOLDER_REQUEST,
+            )
+        } catch (error: Exception) {
+            backupFolderResult = null
+            result.error("backup_folder_unavailable", "Klasör seçilemedi", error.message)
+        }
+    }
+
+    /**
+     * Overwrites a single [AUTO_BACKUP_FILE] inside the chosen folder, so the
+     * automatic copies cannot grow without bound.
+     */
+    private fun writeAutoBackup(treeUri: String, json: String, result: MethodChannel.Result) {
+        if (treeUri.isBlank() || json.isBlank()) {
+            result.success(false)
+            return
+        }
+        try {
+            val tree = DocumentFile.fromTreeUri(this, treeUri.toUri())
+            if (tree == null || !tree.canWrite()) {
+                result.success(false)
+                return
+            }
+            val target = tree.findFile(AUTO_BACKUP_FILE)
+                ?: tree.createFile("application/json", AUTO_BACKUP_FILE)
+                ?: return result.success(false)
+            contentResolver.openOutputStream(target.uri, "wt")?.use { stream ->
+                stream.bufferedWriter(Charsets.UTF_8).use { it.write(json) }
+            } ?: return result.success(false)
+            result.success(true)
+        } catch (error: Exception) {
+            Log.w("SnoonBackup", "Otomatik yedek yazılamadı", error)
+            result.success(false)
+        }
+    }
+
+    /**
+     * Reads a backup document, refusing anything over [MAX_BACKUP_CHARS] so a
+     * mistakenly picked large file cannot exhaust memory.
+     */
+    private fun readBackup(uri: Uri): String {
+        val stream = contentResolver.openInputStream(uri)
+            ?: error("Dosya okuma akışı açılamadı")
+        return stream.bufferedReader(Charsets.UTF_8).use { reader ->
+            val content = StringBuilder()
+            val chunk = CharArray(8 * 1024)
+            while (true) {
+                val count = reader.read(chunk)
+                if (count < 0) break
+                if (content.length + count > MAX_BACKUP_CHARS) {
+                    error("Yedek dosyası çok büyük")
+                }
+                content.appendRange(chunk, 0, count)
+            }
+            content.toString()
+        }
+    }
+
     @Suppress("DEPRECATION")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
@@ -309,7 +414,15 @@ class MainActivity : FlutterActivity() {
             RINGTONE_REQUEST -> {
                 val pending = ringtoneResult
                 ringtoneResult = null
-                val uri = data?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI) as? Uri
+                // IntentCompat keeps the typed lookup working on API 33+, where
+                // the untyped getParcelableExtra overload is deprecated.
+                val uri = data?.let {
+                    IntentCompat.getParcelableExtra(
+                        it,
+                        RingtoneManager.EXTRA_RINGTONE_PICKED_URI,
+                        Uri::class.java,
+                    )
+                }
                 if (uri == null) {
                     pending?.success(null)
                     return
@@ -341,6 +454,25 @@ class MainActivity : FlutterActivity() {
                     pending?.error("backup_write_failed", "Yedek yazılamadı", error.message)
                 }
             }
+            BACKUP_FOLDER_REQUEST -> {
+                val pending = backupFolderResult
+                backupFolderResult = null
+                val uri = data?.data
+                if (resultCode != RESULT_OK || uri == null) {
+                    pending?.success(null)
+                    return
+                }
+                try {
+                    contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                            Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                    )
+                    pending?.success(uri.toString())
+                } catch (error: Exception) {
+                    pending?.error("backup_folder_denied", "Klasör izni alınamadı", error.message)
+                }
+            }
             BACKUP_IMPORT_REQUEST -> {
                 val pending = backupImportResult
                 backupImportResult = null
@@ -350,9 +482,7 @@ class MainActivity : FlutterActivity() {
                     return
                 }
                 try {
-                    val stream = contentResolver.openInputStream(uri)
-                        ?: error("Dosya okuma akışı açılamadı")
-                    pending?.success(stream.bufferedReader(Charsets.UTF_8).use { it.readText() })
+                    pending?.success(readBackup(uri))
                 } catch (error: Exception) {
                     pending?.error("backup_read_failed", "Yedek okunamadı", error.message)
                 }

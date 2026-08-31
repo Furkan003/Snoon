@@ -28,6 +28,22 @@ class _FakeNativeAlarmService extends NativeAlarmService {
     nativeHistory = [];
     return result;
   }
+
+  @override
+  Future<void> scheduleTimer({
+    required String id,
+    required String label,
+    required int triggerAtMillis,
+    String? ringtoneUri,
+    required double volume,
+  }) async {
+    scheduled.add({'id': id, 'label': label, 'isTimer': true});
+  }
+
+  @override
+  Future<void> cancelTimer(String id) async {
+    canceled.add(id);
+  }
 }
 
 class _FailingNativeAlarmService extends _FakeNativeAlarmService {
@@ -366,25 +382,64 @@ void main() {
     },
   );
 
-  test('çalışan zamanlayıcı durumunu yeniden yükler', () async {
+  test('çalışan zamanlayıcılar yeniden yüklenir', () async {
     final first = AppStore(native: _FakeNativeAlarmService());
     await first.load();
-    final target = DateTime.now().add(const Duration(minutes: 5));
-    await first.saveTimerState(
-      id: 'timer-persisted',
-      selectedSeconds: 600,
-      remainingSeconds: 300,
-      running: true,
-      target: target,
-    );
+    await first.addTimer(seconds: 600, label: '', deliveryLabel: 'Timer');
+    await first.addTimer(seconds: 60, label: 'Demlik', deliveryLabel: 'Timer');
 
     final restored = AppStore(native: _FakeNativeAlarmService());
     await restored.load();
 
-    expect(restored.timerId, 'timer-persisted');
-    expect(restored.timerRunning, isTrue);
-    expect(restored.timerSelectedSeconds, 600);
-    expect(restored.timerRemainingSeconds, inInclusiveRange(295, 300));
+    expect(restored.timers, hasLength(2));
+    expect(restored.timers.every((timer) => timer.running), isTrue);
+    expect(restored.timers.first.totalSeconds, 600);
+    expect(restored.timers.first.secondsLeft(), inInclusiveRange(595, 601));
+    expect(restored.timers.last.label, 'Demlik');
+  });
+
+  test('duraklatılan zamanlayıcı kalan süreyi korur', () async {
+    final native = _FakeNativeAlarmService();
+    final store = AppStore(native: native);
+    await store.load();
+    final timer = await store.addTimer(
+      seconds: 300,
+      label: '',
+      deliveryLabel: 'Timer',
+    );
+
+    await store.pauseTimer(timer!.id);
+
+    expect(store.timers.single.running, isFalse);
+    expect(store.timers.single.secondsLeft(), inInclusiveRange(295, 300));
+    expect(native.canceled, contains(timer.id));
+
+    await store.resetTimer(timer.id);
+    expect(store.timers.single.secondsLeft(), 300);
+
+    await store.removeTimer(timer.id);
+    expect(store.timers, isEmpty);
+  });
+
+  test('eski tek zamanlayıcı kaydı listeye taşınır', () async {
+    SharedPreferences.setMockInitialValues({
+      'timer_state_v1': jsonEncode({
+        'id': 'timer-legacy',
+        'selectedSeconds': 900,
+        'remainingSeconds': 420,
+        'running': false,
+        'target': null,
+      }),
+    });
+    final store = AppStore(native: _FakeNativeAlarmService());
+
+    await store.load();
+
+    expect(store.timers.single.id, 'timer-legacy');
+    expect(store.timers.single.totalSeconds, 900);
+    expect(store.timers.single.secondsLeft(), 420);
+    final preferences = await SharedPreferences.getInstance();
+    expect(preferences.containsKey('timer_state_v1'), isFalse);
   });
 
   test('Android planlama hatasını kullanıcı durumuna yansıtır', () async {

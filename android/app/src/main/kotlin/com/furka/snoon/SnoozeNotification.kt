@@ -60,7 +60,13 @@ object SnoozeNotification {
         )
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-            .setContentTitle(strings.getString(R.string.snoozed_minutes, minutes))
+            .setContentTitle(
+                strings.resources.getQuantityString(
+                    R.plurals.snoozed_minutes,
+                    minutes,
+                    minutes,
+                ),
+            )
             .setContentText(strings.getString(R.string.rings_again_at, label, triggerTime))
             .setSubText("Snoon")
             .setContentIntent(openApp)
@@ -78,7 +84,12 @@ object SnoozeNotification {
         if (showToast) {
             Toast.makeText(
                 context,
-                strings.getString(R.string.snooze_toast, minutes, triggerTime),
+                strings.resources.getQuantityString(
+                    R.plurals.snooze_toast,
+                    minutes,
+                    minutes,
+                    triggerTime,
+                ),
                 Toast.LENGTH_LONG,
             ).show()
         }

@@ -25,7 +25,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   late final List<Widget> _pages = [
     AlarmPage(store: widget.store),
     WorldClockPage(store: widget.store),
-    const StopwatchPage(),
+    StopwatchPage(store: widget.store),
     TimerPage(store: widget.store),
     SleepPage(store: widget.store),
   ];

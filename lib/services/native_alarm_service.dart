@@ -2,7 +2,10 @@ import 'package:flutter/services.dart';
 
 class RingtoneChoice {
   const RingtoneChoice({required this.name, required this.uri});
-  final String name;
+
+  /// `null` when Android reports no display name; the UI then falls back to
+  /// its localized default label.
+  final String? name;
   final String uri;
 }
 
@@ -63,6 +66,11 @@ class NativeAlarmService {
   Future<void> openNotificationSettings() =>
       _channel.invokeMethod<void>('openNotificationSettings');
 
+  /// ARGB of the Android 12+ wallpaper accent, or `null` when the platform
+  /// does not offer one.
+  Future<int?> dynamicColorSeed() =>
+      _channel.invokeMethod<int>('dynamicColorSeed');
+
   Future<String> deviceManufacturer() async =>
       await _channel.invokeMethod<String>('deviceManufacturer') ?? 'Android';
 
@@ -75,8 +83,9 @@ class NativeAlarmService {
       {'alarm': alarm},
     );
     if (result == null || result['uri'] == null) return null;
+    final name = result['name'] as String?;
     return RingtoneChoice(
-      name: result['name'] as String? ?? 'Seçilen ses',
+      name: name == null || name.isEmpty ? null : name,
       uri: result['uri'] as String,
     );
   }
@@ -113,4 +122,18 @@ class NativeAlarmService {
       await _channel.invokeMethod<bool>('saveBackup', {'json': json}) ?? false;
 
   Future<String?> pickBackup() => _channel.invokeMethod<String>('pickBackup');
+
+  /// Asks for a folder and keeps the grant, returning its tree URI.
+  Future<String?> pickBackupFolder() =>
+      _channel.invokeMethod<String>('pickBackupFolder');
+
+  Future<bool> writeAutoBackup({
+    required String treeUri,
+    required String json,
+  }) async =>
+      await _channel.invokeMethod<bool>('writeAutoBackup', {
+        'treeUri': treeUri,
+        'json': json,
+      }) ??
+      false;
 }

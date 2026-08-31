@@ -39,7 +39,6 @@ dependencies:
   intl: ^0.20.2
   shared_preferences: ^2.5.5
   timezone: ^0.11.1
-
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -66,8 +65,11 @@ flutter:
   uses-material-design: true
 
   assets:
-    - lib/l10n/
-    - assets/branding/
+    # lib/l10n holds build-time inputs (ARB) and generated Dart; gen-l10n
+    # compiles them in, so they must not ship as runtime assets. Only the
+    # display logo is bundled - snoon-icon-source.png stays in the repo as the
+    # master the launcher icon and this logo are generated from.
+    - assets/branding/snoon-logo.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

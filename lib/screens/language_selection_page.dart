@@ -43,7 +43,7 @@ class _LanguageSelectionPageState extends State<LanguageSelectionPage> {
               children: [
                 Align(
                   child: Image.asset(
-                    'assets/branding/snoon-icon-source.png',
+                    'assets/branding/snoon-logo.png',
                     width: 104,
                     height: 104,
                   ),

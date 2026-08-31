@@ -80,3 +80,12 @@ String localizedDismissTaskLabel(AppLocalizations l10n, DismissTask task) =>
       DismissTask.math => l10n.mathTask,
       DismissTask.shake => l10n.shakeTask,
     };
+
+String localizedMathDifficultyLabel(
+  AppLocalizations l10n,
+  MathDifficulty difficulty,
+) => switch (difficulty) {
+  MathDifficulty.easy => l10n.mathEasy,
+  MathDifficulty.medium => l10n.mathMedium,
+  MathDifficulty.hard => l10n.mathHard,
+};

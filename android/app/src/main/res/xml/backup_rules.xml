@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Auto Backup rules for Android 11 and below.
+
+  Alarms, groups, settings and the world clock live in the Flutter shared
+  preferences and are worth restoring. The native scheduler records and the
+  native locale copy are device-scoped caches: AppStore.syncDeliveryQueue()
+  rebuilds them on the next launch, so restoring a stale copy would only risk
+  re-registering alarms that no longer exist.
+-->
+<full-backup-content>
+    <exclude domain="device_sharedpref" path="saat2_native_alarms.xml" />
+    <exclude domain="device_sharedpref" path="snoon_locale.xml" />
+</full-backup-content>

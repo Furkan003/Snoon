@@ -773,4 +773,183 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get sameStartEndError =>
       'As horas de início e fim não podem ser iguais.';
+
+  @override
+  String get defaultAlarmRingtone => 'Som de alarme do sistema';
+
+  @override
+  String get defaultTimerRingtone => 'Som de temporizador do sistema';
+
+  @override
+  String get backupErrorInvalidFormat =>
+      'O formato da cópia de segurança é inválido.';
+
+  @override
+  String get backupErrorUnsupportedFile =>
+      'Este ficheiro não é uma cópia de segurança do Snoon suportada.';
+
+  @override
+  String get backupErrorCorruptContent =>
+      'O conteúdo da cópia de segurança está danificado ou incompleto.';
+
+  @override
+  String get backupErrorInvalidGroup =>
+      'A cópia de segurança contém um grupo de alarmes inválido.';
+
+  @override
+  String get backupErrorInvalidAlarm =>
+      'A cópia de segurança contém um registo de alarme inválido.';
+
+  @override
+  String get backupErrorDuplicateAlarm =>
+      'A cópia de segurança contém um ID de alarme duplicado.';
+
+  @override
+  String get backupErrorInvalidSettings =>
+      'A cópia de segurança contém uma definição da aplicação inválida.';
+
+  @override
+  String get backupErrorInvalidSleep =>
+      'A cópia de segurança contém uma definição de sono inválida.';
+
+  @override
+  String get backupErrorInvalidCity =>
+      'A cópia de segurança contém um relógio mundial inválido.';
+
+  @override
+  String get skipNext => 'Ignorar a próxima';
+
+  @override
+  String skipNextSuccess(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'O próximo toque de $count alarmes será ignorado.',
+      one: 'O próximo toque será ignorado.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipNextNothing => 'Não há nenhum toque futuro para ignorar.';
+
+  @override
+  String get nextSkipped => 'Próximo ignorado';
+
+  @override
+  String get clearSkip => 'Retomar o horário';
+
+  @override
+  String get customVolume => 'Volume próprio';
+
+  @override
+  String get customVolumeSubtitle =>
+      'Tocar este alarme com o seu próprio nível em vez do volume da aplicação';
+
+  @override
+  String get mathDifficulty => 'Dificuldade da conta';
+
+  @override
+  String get mathEasy => 'Fácil';
+
+  @override
+  String get mathMedium => 'Média';
+
+  @override
+  String get mathHard => 'Difícil';
+
+  @override
+  String get quickAlarm => 'Alarme rápido';
+
+  @override
+  String get quickAlarmSubtitle =>
+      'Acordar-me dentro de alguns minutos. O alarme apaga-se sozinho depois de tocar.';
+
+  @override
+  String quickAlarmSet(String time) {
+    return 'Alarme rápido definido para as $time.';
+  }
+
+  @override
+  String get dynamicColor => 'Cores do fundo';
+
+  @override
+  String get dynamicColorSubtitle =>
+      'Usar a paleta do sistema Android (Android 12 ou posterior)';
+
+  @override
+  String get statistics => 'Estatísticas';
+
+  @override
+  String get statsEmptyTitle => 'Ainda sem histórico';
+
+  @override
+  String get statsEmptyMessage =>
+      'Assim que os alarmes começarem a tocar, os números aparecem aqui.';
+
+  @override
+  String lastDays(int count) {
+    return '$count dias';
+  }
+
+  @override
+  String get statsRang => 'Tocou';
+
+  @override
+  String get statsSnoozed => 'Adiado';
+
+  @override
+  String get statsDismissed => 'Desligado';
+
+  @override
+  String get statsAutoSilenced => 'Silenciado sozinho';
+
+  @override
+  String get statsSnoozePerAlarm => 'Adiamentos por alarme';
+
+  @override
+  String get statsSnoozePerAlarmHint =>
+      'Número médio de adiamentos sempre que um alarme toca.';
+
+  @override
+  String get statsByAlarm => 'Por alarme';
+
+  @override
+  String get statsBusiestDays => 'Dias mais movimentados';
+
+  @override
+  String statsAlarmBreakdown(int rang, int snoozed) {
+    return 'Tocou $rang vezes, adiado $snoozed vezes';
+  }
+
+  @override
+  String get autoBackup => 'Cópia automática';
+
+  @override
+  String get autoBackupSubtitle =>
+      'Escrever uma cópia numa pasta à tua escolha, uma vez por semana';
+
+  @override
+  String get autoBackupChooseFolder => 'Escolher pasta';
+
+  @override
+  String get autoBackupOff => 'Desativada';
+
+  @override
+  String get autoBackupNever => 'Ainda não foi escrita';
+
+  @override
+  String autoBackupLast(String date) {
+    return 'Última cópia: $date';
+  }
+
+  @override
+  String get autoBackupFolderFailed => 'Não foi possível escolher a pasta.';
+
+  @override
+  String get timerEmptyTitle => 'Nenhum temporizador a correr';
+
+  @override
+  String get timerEmptyMessage =>
+      'Escolhe uma duração acima para começar. Podes ter vários ao mesmo tempo.';
 }

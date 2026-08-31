@@ -122,25 +122,21 @@ void main() {
 
     await tester.tap(find.text('Zamanlayıcı'));
     await tester.pumpAndSettle();
+    // Picking a preset creates the countdown and starts it in one step.
     await tester.tap(find.text('1 dk'));
-    await tester.tap(find.byIcon(Icons.play_arrow));
-    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pump();
+    expect(store.timers, hasLength(1));
     expect(native.timers, hasLength(1));
+    expect(store.timers.single.running, isTrue);
+
     await tester.tap(find.byIcon(Icons.pause));
     await tester.pump();
+    expect(store.timers.single.running, isFalse);
     expect(native.timers, isEmpty);
-    await tester.tap(find.byIcon(Icons.refresh));
+
+    await tester.tap(find.byIcon(Icons.close));
     await tester.pump();
-    await tester.tap(find.text('Özel'));
-    await tester.pumpAndSettle();
-    final durationFields = find.byType(TextField);
-    expect(durationFields, findsNWidgets(3));
-    await tester.enterText(durationFields.at(0), '0');
-    await tester.enterText(durationFields.at(1), '0');
-    await tester.enterText(durationFields.at(2), '3');
-    await tester.tap(find.text('Uygula'));
-    await tester.pumpAndSettle();
-    expect(find.text('00:00:03'), findsOneWidget);
+    expect(store.timers, isEmpty);
 
     await tester.tap(find.text('Uyku'));
     await tester.pumpAndSettle();
@@ -156,7 +152,9 @@ void main() {
 
     await tester.tap(find.text('Alarm'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(FloatingActionButton));
+    // The alarm tab also carries the quick-alarm button, so target the editor
+    // one by its icon.
+    await tester.tap(find.widgetWithIcon(FloatingActionButton, Icons.add));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField), 'Çok günlü alarm');
     for (final day in ['Pzt', 'Çar', 'Cum']) {

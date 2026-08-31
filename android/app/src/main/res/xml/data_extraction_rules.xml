@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- See backup_rules.xml for why the native scheduler caches are excluded. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="device_sharedpref" path="saat2_native_alarms.xml" />
+        <exclude domain="device_sharedpref" path="snoon_locale.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="device_sharedpref" path="saat2_native_alarms.xml" />
+        <exclude domain="device_sharedpref" path="snoon_locale.xml" />
+    </device-transfer>
+</data-extraction-rules>

@@ -6,7 +6,6 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import androidx.core.app.NotificationCompat
 import org.json.JSONObject
 
@@ -55,11 +54,7 @@ class AlarmReceiver : BroadcastReceiver() {
             putExtra("occurrenceToken", occurrenceToken)
             putExtra("snoozeCount", snoozeCount)
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            context.startForegroundService(serviceIntent)
-        } else {
-            context.startService(serviceIntent)
-        }
+        context.startForegroundService(serviceIntent)
 
         // When the app is already visible Android may keep a full-screen
         // notification as a heads-up banner. Open the dedicated ringing
@@ -83,6 +78,7 @@ class AlarmReceiver : BroadcastReceiver() {
 
         if (kind == AlarmScheduler.KIND_MAIN) {
             AlarmScheduler.advanceAfterFire(context, record, occurrenceToken)
+            NextAlarmWidget.refresh(context)
         } else if (
             kind == AlarmScheduler.KIND_SNOOZE &&
             !record.isNull("rangeEndMinutes") &&
@@ -96,17 +92,15 @@ class AlarmReceiver : BroadcastReceiver() {
         val strings = LocaleHelper.wrap(context)
         val manager = context.getSystemService(NotificationManager::class.java)
         val channelId = "upcoming_alarm"
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            manager.createNotificationChannel(
-                NotificationChannel(
-                    channelId,
-                    strings.getString(R.string.upcoming_channel),
-                    NotificationManager.IMPORTANCE_DEFAULT,
-                ).apply {
-                    description = strings.getString(R.string.upcoming_channel_description)
-                },
-            )
-        }
+        manager.createNotificationChannel(
+            NotificationChannel(
+                channelId,
+                strings.getString(R.string.upcoming_channel),
+                NotificationManager.IMPORTANCE_DEFAULT,
+            ).apply {
+                description = strings.getString(R.string.upcoming_channel_description)
+            },
+        )
         val openIntent = PendingIntent.getActivity(
             context,
             record.optString("id").hashCode(),
@@ -145,17 +139,15 @@ class AlarmReceiver : BroadcastReceiver() {
         val strings = LocaleHelper.wrap(context)
         val manager = context.getSystemService(NotificationManager::class.java)
         val channelId = "sleep_reminder"
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            manager.createNotificationChannel(
-                NotificationChannel(
-                    channelId,
-                    strings.getString(R.string.sleep_channel),
-                    NotificationManager.IMPORTANCE_DEFAULT,
-                ).apply {
-                    description = strings.getString(R.string.sleep_channel_description)
-                },
-            )
-        }
+        manager.createNotificationChannel(
+            NotificationChannel(
+                channelId,
+                strings.getString(R.string.sleep_channel),
+                NotificationManager.IMPORTANCE_DEFAULT,
+            ).apply {
+                description = strings.getString(R.string.sleep_channel_description)
+            },
+        )
         val openIntent = PendingIntent.getActivity(
             context,
             record.optString("id").hashCode(),

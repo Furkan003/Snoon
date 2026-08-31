@@ -1,12 +1,16 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../l10n/l10n.dart';
+import '../models/alarm_models.dart';
 import '../services/app_store.dart';
+import '../ui/ui_helpers.dart';
 
 class TimerPage extends StatefulWidget {
   const TimerPage({super.key, required this.store});
+
   final AppStore store;
 
   @override
@@ -14,43 +18,70 @@ class TimerPage extends StatefulWidget {
 }
 
 class _TimerPageState extends State<TimerPage> {
-  int _selectedSeconds = 5 * 60;
-  int _remainingSeconds = 5 * 60;
-  DateTime? _target;
   Timer? _ticker;
-  bool _running = false;
-  String? _timerId;
 
   @override
   void initState() {
     super.initState();
-    _selectedSeconds = widget.store.timerSelectedSeconds;
-    _remainingSeconds = widget.store.timerRemainingSeconds;
-    _target = widget.store.timerTarget;
-    _running =
-        widget.store.timerRunning &&
-        _target != null &&
-        _target!.isAfter(DateTime.now());
-    _timerId = widget.store.timerId;
-    if (_running) {
+    _syncTicker();
+  }
+
+  /// One ticker drives every running countdown; it stops as soon as none are
+  /// running so an idle page schedules no frames.
+  void _syncTicker() {
+    final anyRunning = widget.store.timers.any((timer) => timer.running);
+    if (anyRunning && _ticker == null) {
       _ticker = Timer.periodic(
         const Duration(milliseconds: 250),
         (_) => _tick(),
       );
-      WidgetsBinding.instance.addPostFrameCallback((_) => _tick());
+    } else if (!anyRunning) {
+      _ticker?.cancel();
+      _ticker = null;
     }
   }
 
-  void _setPreset(int seconds) {
-    if (_running) return;
-    setState(() {
-      _selectedSeconds = seconds;
-      _remainingSeconds = seconds;
-    });
+  void _tick() {
+    if (!mounted) return;
+    for (final timer in widget.store.timers) {
+      if (timer.running && timer.secondsLeft() <= 0) {
+        unawaited(widget.store.expireTimer(timer.id));
+      }
+    }
+    setState(_syncTicker);
+  }
+
+  Future<void> _add(int seconds) async {
+    final l10n = context.l10n;
+    final added = await widget.store.addTimer(
+      seconds: seconds,
+      label: '',
+      deliveryLabel: l10n.timer,
+    );
+    if (!mounted) return;
+    if (added == null) {
+      showMessage(context, l10n.permissionsWarningSubtitle);
+      return;
+    }
+    setState(_syncTicker);
+  }
+
+  Future<void> _toggle(TimerItem timer) async {
+    if (timer.running) {
+      await widget.store.pauseTimer(timer.id);
+    } else {
+      final started = await widget.store.startTimer(
+        timer.id,
+        deliveryLabel: context.mounted ? context.l10n.timer : 'Timer',
+      );
+      if (started == null && mounted) {
+        showMessage(context, context.l10n.permissionsWarningSubtitle);
+      }
+    }
+    if (mounted) setState(_syncTicker);
   }
 
   Future<void> _pickCustomDuration() async {
-    if (_running) return;
     var hours = '';
     var minutes = '';
     var seconds = '';
@@ -60,25 +91,33 @@ class _TimerPageState extends State<TimerPage> {
         title: Text(context.l10n.customTimer),
         content: Row(
           children: [
-            for (final field in [
-              (context.l10n.hours, (String value) => hours = value),
-              (context.l10n.minutes, (String value) => minutes = value),
-              (context.l10n.seconds, (String value) => seconds = value),
-            ]) ...[
-              Expanded(
-                child: TextField(
-                  keyboardType: TextInputType.number,
-                  maxLength: 2,
-                  textAlign: TextAlign.center,
-                  decoration: InputDecoration(
-                    labelText: field.$1,
-                    counterText: '',
-                  ),
-                  onChanged: field.$2,
-                ),
+            Expanded(
+              child: TextField(
+                autofocus: true,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: InputDecoration(labelText: context.l10n.hours),
+                onChanged: (text) => hours = text,
               ),
-              if (field.$1 != context.l10n.seconds) const SizedBox(width: 8),
-            ],
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextField(
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: InputDecoration(labelText: context.l10n.minutes),
+                onChanged: (text) => minutes = text,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextField(
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: InputDecoration(labelText: context.l10n.seconds),
+                onChanged: (text) => seconds = text,
+              ),
+            ),
           ],
         ),
         actions: [
@@ -88,102 +127,18 @@ class _TimerPageState extends State<TimerPage> {
           ),
           FilledButton(
             onPressed: () {
-              final hour = int.tryParse(hours) ?? 0;
-              final minute = int.tryParse(minutes) ?? 0;
-              final second = int.tryParse(seconds) ?? 0;
-              final total = hour * 3600 + minute * 60 + second;
-              if (hour > 99 || minute > 59 || second > 59 || total <= 0) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(context.l10n.invalidDuration)),
-                );
-                return;
-              }
+              final total =
+                  (int.tryParse(hours) ?? 0) * 3600 +
+                  (int.tryParse(minutes) ?? 0) * 60 +
+                  (int.tryParse(seconds) ?? 0);
               Navigator.pop(context, total);
             },
-            child: Text(context.l10n.apply),
+            child: Text(context.l10n.start),
           ),
         ],
       ),
     );
-    if (value != null && mounted) _setPreset(value);
-  }
-
-  Future<void> _startOrPause() async {
-    if (_running) {
-      _ticker?.cancel();
-      if (_target != null) {
-        _remainingSeconds = _target!
-            .difference(DateTime.now())
-            .inSeconds
-            .clamp(0, 86400 * 7);
-      }
-      if (_timerId != null) {
-        await widget.store.cancelTimerDelivery(_timerId!);
-        await widget.store.saveTimerState(
-          id: _timerId!,
-          selectedSeconds: _selectedSeconds,
-          remainingSeconds: _remainingSeconds,
-          running: false,
-        );
-      }
-      if (mounted) setState(() => _running = false);
-      return;
-    }
-    if (_remainingSeconds <= 0) _remainingSeconds = _selectedSeconds;
-    _target = DateTime.now().add(Duration(seconds: _remainingSeconds));
-    _timerId ??= 'timer-${DateTime.now().millisecondsSinceEpoch}';
-    final scheduled = await widget.store.scheduleTimerDelivery(
-      id: _timerId!,
-      label: context.l10n.timer,
-      triggerAtMillis: _target!.millisecondsSinceEpoch,
-    );
-    if (!scheduled) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.permissionsWarningSubtitle)),
-        );
-      }
-      return;
-    }
-    await widget.store.saveTimerState(
-      id: _timerId!,
-      selectedSeconds: _selectedSeconds,
-      remainingSeconds: _remainingSeconds,
-      running: true,
-      target: _target,
-    );
-    _ticker = Timer.periodic(const Duration(milliseconds: 250), (_) => _tick());
-    if (mounted) setState(() => _running = true);
-  }
-
-  void _tick() {
-    if (_target == null || !mounted) return;
-    final remaining = _target!.difference(DateTime.now()).inSeconds + 1;
-    if (remaining <= 0) {
-      _ticker?.cancel();
-      unawaited(widget.store.clearTimerState());
-      setState(() {
-        _running = false;
-        _remainingSeconds = 0;
-        _target = null;
-        _timerId = null;
-      });
-    } else {
-      setState(() => _remainingSeconds = remaining);
-    }
-  }
-
-  Future<void> _reset() async {
-    _ticker?.cancel();
-    if (_timerId != null) await widget.store.cancelTimerDelivery(_timerId!);
-    await widget.store.clearTimerState();
-    if (!mounted) return;
-    setState(() {
-      _running = false;
-      _remainingSeconds = _selectedSeconds;
-      _target = null;
-      _timerId = null;
-    });
+    if (value != null && value > 0 && mounted) await _add(value);
   }
 
   String _format(int seconds) {
@@ -201,89 +156,124 @@ class _TimerPageState extends State<TimerPage> {
 
   @override
   Widget build(BuildContext context) {
-    final progress = _selectedSeconds == 0
-        ? 0.0
-        : _remainingSeconds / _selectedSeconds;
+    final l10n = context.l10n;
+    final timers = widget.store.timers;
     return Scaffold(
-      appBar: AppBar(title: Text(context.l10n.timer)),
+      appBar: AppBar(title: Text(l10n.timer)),
       body: Column(
         children: [
-          Expanded(
-            child: Center(
-              child: SizedBox(
-                width: 280,
-                height: 280,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    CircularProgressIndicator(
-                      value: progress.clamp(0, 1),
-                      strokeWidth: 8,
-                      backgroundColor: const Color(0xFF20222C),
-                      strokeCap: StrokeCap.round,
-                    ),
-                    Center(
-                      child: Text(
-                        _format(_remainingSeconds),
-                        style: const TextStyle(
-                          fontSize: 42,
-                          fontWeight: FontWeight.w300,
-                          letterSpacing: -1,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          if (!_running)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 10,
-                runSpacing: 8,
-                children: [
-                  for (final preset in [
-                    (60, context.l10n.minutesShort(1)),
-                    (300, context.l10n.minutesShort(5)),
-                    (600, context.l10n.minutesShort(10)),
-                    (1500, context.l10n.minutesShort(25)),
-                    (3600, context.l10n.hourShort(1)),
-                  ])
-                    ActionChip(
-                      label: Text(preset.$2),
-                      onPressed: () => _setPreset(preset.$1),
-                    ),
-                  ActionChip(
-                    avatar: const Icon(Icons.tune, size: 18),
-                    label: Text(context.l10n.custom),
-                    onPressed: _pickCustomDuration,
-                  ),
-                ],
-              ),
-            ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(24, 28, 24, 28),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
-                IconButton.filledTonal(
-                  style: IconButton.styleFrom(fixedSize: const Size(70, 70)),
-                  onPressed: _reset,
-                  icon: const Icon(Icons.refresh, size: 30),
-                ),
-                IconButton.filled(
-                  style: IconButton.styleFrom(fixedSize: const Size(78, 78)),
-                  onPressed: _startOrPause,
-                  icon: Icon(
-                    _running ? Icons.pause : Icons.play_arrow,
-                    size: 34,
+                for (final preset in const [60, 300, 600, 900, 1800, 3600])
+                  ActionChip(
+                    label: Text(
+                      preset < 3600
+                          ? l10n.minutesShort(preset ~/ 60)
+                          : l10n.hourShort(preset ~/ 3600),
+                    ),
+                    onPressed: () => _add(preset),
                   ),
+                ActionChip(
+                  avatar: const Icon(Icons.tune, size: 18),
+                  label: Text(l10n.customTimer),
+                  onPressed: _pickCustomDuration,
                 ),
               ],
             ),
+          ),
+          const Divider(height: 20),
+          Expanded(
+            child: timers.isEmpty
+                ? EmptyState(
+                    icon: Icons.hourglass_empty,
+                    title: l10n.timerEmptyTitle,
+                    message: l10n.timerEmptyMessage,
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
+                    itemCount: timers.length,
+                    itemBuilder: (context, index) {
+                      final timer = timers[index];
+                      final left = timer.secondsLeft();
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(18, 14, 8, 14),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      _format(left),
+                                      style: const TextStyle(
+                                        fontSize: 34,
+                                        fontWeight: FontWeight.w300,
+                                        letterSpacing: -1,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(6),
+                                      child: LinearProgressIndicator(
+                                        value: timer.totalSeconds == 0
+                                            ? 0
+                                            : left / timer.totalSeconds,
+                                        minHeight: 5,
+                                        backgroundColor: const Color(
+                                          0xFF2A2C36,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      _format(timer.totalSeconds),
+                                      style: const TextStyle(
+                                        color: Color(0xFFA7A9B5),
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: timer.running
+                                    ? l10n.pause
+                                    : l10n.start,
+                                onPressed: () => _toggle(timer),
+                                icon: Icon(
+                                  timer.running
+                                      ? Icons.pause
+                                      : Icons.play_arrow,
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: l10n.reset,
+                                onPressed: () async {
+                                  await widget.store.resetTimer(timer.id);
+                                  if (mounted) setState(_syncTicker);
+                                },
+                                icon: const Icon(Icons.refresh),
+                              ),
+                              IconButton(
+                                tooltip: l10n.delete,
+                                onPressed: () async {
+                                  await widget.store.removeTimer(timer.id);
+                                  if (mounted) setState(_syncTicker);
+                                },
+                                icon: const Icon(Icons.close),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
           ),
         ],
       ),

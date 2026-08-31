@@ -16,6 +16,7 @@ class BootReceiver : BroadcastReceiver() {
             )
         ) {
             AlarmScheduler.rescheduleAll(context)
+            NextAlarmWidget.refresh(context)
         }
     }
 }

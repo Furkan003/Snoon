@@ -60,6 +60,36 @@ class SettingsPage extends StatelessWidget {
     }
   }
 
+  String _backupIssueMessage(BuildContext context, BackupIssue issue) {
+    final l10n = context.l10n;
+    return switch (issue) {
+      BackupIssue.invalidFormat => l10n.backupErrorInvalidFormat,
+      BackupIssue.unsupportedFile => l10n.backupErrorUnsupportedFile,
+      BackupIssue.corruptContent => l10n.backupErrorCorruptContent,
+      BackupIssue.invalidGroup => l10n.backupErrorInvalidGroup,
+      BackupIssue.invalidAlarm => l10n.backupErrorInvalidAlarm,
+      BackupIssue.duplicateAlarm => l10n.backupErrorDuplicateAlarm,
+      BackupIssue.invalidSettings => l10n.backupErrorInvalidSettings,
+      BackupIssue.invalidSleep => l10n.backupErrorInvalidSleep,
+      BackupIssue.invalidCity => l10n.backupErrorInvalidCity,
+    };
+  }
+
+  Future<void> _chooseBackupFolder(BuildContext context) async {
+    try {
+      final uri = await store.native.pickBackupFolder();
+      if (uri == null || !context.mounted) return;
+      await store.updateSettings(
+        store.settings.copyWith(autoBackupFolder: uri, lastAutoBackupAt: null),
+      );
+      await store.runAutoBackupIfDue(every: Duration.zero);
+    } on PlatformException {
+      if (context.mounted) {
+        showMessage(context, context.l10n.autoBackupFolderFailed);
+      }
+    }
+  }
+
   Future<void> _importBackup(BuildContext context) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -84,8 +114,10 @@ class SettingsPage extends StatelessWidget {
       if (raw == null) return;
       await store.restoreBackupJson(raw);
       if (context.mounted) showMessage(context, context.l10n.backupRestored);
-    } on FormatException catch (error) {
-      if (context.mounted) showMessage(context, error.message.toString());
+    } on BackupFormatException catch (error) {
+      if (context.mounted) {
+        showMessage(context, _backupIssueMessage(context, error.issue));
+      }
     } on PlatformException {
       if (context.mounted) showMessage(context, context.l10n.backupReadFailed);
     } catch (_) {
@@ -143,6 +175,16 @@ class SettingsPage extends StatelessWidget {
                   ),
                 ),
                 const Divider(height: 1),
+                SwitchListTile(
+                  secondary: const Icon(Icons.colorize_outlined),
+                  title: Text(context.l10n.dynamicColor),
+                  subtitle: Text(context.l10n.dynamicColorSubtitle),
+                  value: settings.dynamicColor,
+                  onChanged: (value) => store.updateSettings(
+                    settings.copyWith(dynamicColor: value),
+                  ),
+                ),
+                const Divider(height: 1),
                 ListTile(
                   leading: const Icon(Icons.verified_user_outlined),
                   title: Text(context.l10n.reliabilityCenter),
@@ -183,6 +225,39 @@ class SettingsPage extends StatelessWidget {
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => _importBackup(context),
                 ),
+                const Divider(height: 1),
+                SwitchListTile(
+                  secondary: const Icon(Icons.folder_zip_outlined),
+                  title: Text(context.l10n.autoBackup),
+                  subtitle: Text(
+                    settings.autoBackupFolder == null
+                        ? context.l10n.autoBackupSubtitle
+                        : settings.lastAutoBackupAt == null
+                        ? context.l10n.autoBackupNever
+                        : context.l10n.autoBackupLast(
+                            dateTimeTextLocalized(
+                              context,
+                              settings.lastAutoBackupAt!,
+                            ),
+                          ),
+                  ),
+                  value: settings.autoBackupFolder != null,
+                  onChanged: (value) => value
+                      ? _chooseBackupFolder(context)
+                      : store.updateSettings(
+                          settings.copyWith(
+                            autoBackupFolder: null,
+                            lastAutoBackupAt: null,
+                          ),
+                        ),
+                ),
+                if (settings.autoBackupFolder != null)
+                  ListTile(
+                    leading: const Icon(Icons.drive_folder_upload_outlined),
+                    title: Text(context.l10n.autoBackupChooseFolder),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _chooseBackupFolder(context),
+                  ),
               ],
             ),
             SectionTitle(context.l10n.sounds),
@@ -191,7 +266,10 @@ class SettingsPage extends StatelessWidget {
                 ListTile(
                   leading: const Icon(Icons.alarm),
                   title: Text(context.l10n.alarmRingtone),
-                  subtitle: Text(settings.alarmRingtoneName),
+                  subtitle: Text(
+                    settings.alarmRingtoneName ??
+                        context.l10n.defaultAlarmRingtone,
+                  ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => _pickAlarmRingtone(context),
                 ),
@@ -199,7 +277,10 @@ class SettingsPage extends StatelessWidget {
                 ListTile(
                   leading: const Icon(Icons.hourglass_bottom),
                   title: Text(context.l10n.timerRingtone),
-                  subtitle: Text(settings.timerRingtoneName),
+                  subtitle: Text(
+                    settings.timerRingtoneName ??
+                        context.l10n.defaultTimerRingtone,
+                  ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => _pickTimerRingtone(context),
                 ),

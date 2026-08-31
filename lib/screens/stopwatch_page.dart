@@ -3,41 +3,59 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../l10n/l10n.dart';
+import '../services/app_store.dart';
 
 class StopwatchPage extends StatefulWidget {
-  const StopwatchPage({super.key});
+  const StopwatchPage({super.key, required this.store});
+
+  final AppStore store;
 
   @override
   State<StopwatchPage> createState() => _StopwatchPageState();
 }
 
 class _StopwatchPageState extends State<StopwatchPage> {
-  final Stopwatch _stopwatch = Stopwatch();
-  final List<Duration> _laps = [];
   Timer? _ticker;
 
-  void _toggle() {
-    if (_stopwatch.isRunning) {
-      _stopwatch.stop();
-      _ticker?.cancel();
-    } else {
-      _stopwatch.start();
-      _ticker = Timer.periodic(const Duration(milliseconds: 40), (_) {
-        if (mounted) setState(() {});
-      });
-    }
-    setState(() {});
+  @override
+  void initState() {
+    super.initState();
+    // The store owns the elapsed time, so a run survives leaving the app.
+    if (widget.store.stopwatchRunning) _startTicker();
   }
 
-  void _reset() {
+  void _startTicker() {
     _ticker?.cancel();
-    _stopwatch
-      ..stop()
-      ..reset();
-    setState(_laps.clear);
+    _ticker = Timer.periodic(const Duration(milliseconds: 40), (_) {
+      if (mounted) setState(() {});
+    });
   }
 
-  void _lap() => setState(() => _laps.insert(0, _stopwatch.elapsed));
+  Future<void> _toggle() async {
+    // Start and stop the ticker synchronously with the tap. Doing it after the
+    // await would leave a periodic timer alive across the gap, which keeps the
+    // frame scheduler busy and stalls anything waiting for the UI to settle.
+    if (widget.store.stopwatchRunning) {
+      _ticker?.cancel();
+      _ticker = null;
+    } else {
+      _startTicker();
+    }
+    await widget.store.toggleStopwatch();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _reset() async {
+    _ticker?.cancel();
+    _ticker = null;
+    await widget.store.clearStopwatch();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _lap() async {
+    await widget.store.addStopwatchLap();
+    if (mounted) setState(() {});
+  }
 
   String _format(Duration value) {
     final hours = value.inHours;
@@ -54,35 +72,39 @@ class _StopwatchPageState extends State<StopwatchPage> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(context.l10n.stopwatch)),
-    body: Column(
-      children: [
-        Expanded(
-          flex: 3,
-          child: Center(
-            child: Container(
-              width: 280,
-              height: 280,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: const Color(0xFF3A2F55), width: 2),
-                gradient: const RadialGradient(
-                  colors: [Color(0xFF201834), Color(0xFF0A0B10)],
+  Widget build(BuildContext context) {
+    final running = widget.store.stopwatchRunning;
+    final laps = widget.store.stopwatchLaps;
+    return Scaffold(
+      appBar: AppBar(title: Text(context.l10n.stopwatch)),
+      body: Column(
+        children: [
+          Expanded(
+            flex: 3,
+            child: Center(
+              child: Container(
+                width: 280,
+                height: 280,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: const Color(0xFF3A2F55), width: 2),
+                  gradient: const RadialGradient(
+                    colors: [Color(0xFF201834), Color(0xFF0A0B10)],
+                  ),
                 ),
-              ),
-              child: Center(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Padding(
-                    padding: const EdgeInsets.all(22),
-                    child: Text(
-                      _format(_stopwatch.elapsed),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 37,
-                        fontWeight: FontWeight.w300,
-                        letterSpacing: -1,
+                child: Center(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Padding(
+                      padding: const EdgeInsets.all(22),
+                      child: Text(
+                        _format(widget.store.stopwatchElapsed),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 37,
+                          fontWeight: FontWeight.w300,
+                          letterSpacing: -1,
+                        ),
                       ),
                     ),
                   ),
@@ -90,52 +112,46 @@ class _StopwatchPageState extends State<StopwatchPage> {
               ),
             ),
           ),
-        ),
-        if (_laps.isNotEmpty)
-          Expanded(
-            flex: 2,
-            child: ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 26),
-              itemCount: _laps.length,
-              separatorBuilder: (_, _) => const Divider(),
-              itemBuilder: (context, index) => ListTile(
-                title: Text(context.l10n.lapNumber(_laps.length - index)),
-                trailing: Text(
-                  _format(_laps[index]),
-                  style: const TextStyle(fontFeatures: []),
+          if (laps.isNotEmpty)
+            Expanded(
+              flex: 2,
+              child: ListView.separated(
+                padding: const EdgeInsets.symmetric(horizontal: 26),
+                itemCount: laps.length,
+                separatorBuilder: (_, _) => const Divider(),
+                itemBuilder: (context, index) => ListTile(
+                  title: Text(context.l10n.lapNumber(laps.length - index)),
+                  trailing: Text(
+                    _format(laps[index]),
+                    style: const TextStyle(fontFeatures: []),
+                  ),
                 ),
               ),
             ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _RoundAction(
+                  icon: running ? Icons.flag_outlined : Icons.refresh,
+                  label: running ? context.l10n.lap : context.l10n.reset,
+                  onTap: running ? _lap : _reset,
+                  filled: false,
+                ),
+                _RoundAction(
+                  icon: running ? Icons.pause : Icons.play_arrow,
+                  label: running ? context.l10n.pause : context.l10n.start,
+                  onTap: _toggle,
+                  filled: true,
+                ),
+              ],
+            ),
           ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _RoundAction(
-                icon: _stopwatch.isRunning
-                    ? Icons.flag_outlined
-                    : Icons.refresh,
-                label: _stopwatch.isRunning
-                    ? context.l10n.lap
-                    : context.l10n.reset,
-                onTap: _stopwatch.isRunning ? _lap : _reset,
-                filled: false,
-              ),
-              _RoundAction(
-                icon: _stopwatch.isRunning ? Icons.pause : Icons.play_arrow,
-                label: _stopwatch.isRunning
-                    ? context.l10n.pause
-                    : context.l10n.start,
-                onTap: _toggle,
-                filled: true,
-              ),
-            ],
-          ),
-        ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
 }
 
 class _RoundAction extends StatelessWidget {

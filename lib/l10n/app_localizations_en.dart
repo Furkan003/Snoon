@@ -762,4 +762,182 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get sameStartEndError => 'Start and end time cannot be the same.';
+
+  @override
+  String get defaultAlarmRingtone => 'System alarm sound';
+
+  @override
+  String get defaultTimerRingtone => 'System timer sound';
+
+  @override
+  String get backupErrorInvalidFormat => 'The backup format is invalid.';
+
+  @override
+  String get backupErrorUnsupportedFile =>
+      'This file is not a supported Snoon backup.';
+
+  @override
+  String get backupErrorCorruptContent =>
+      'The backup content is damaged or incomplete.';
+
+  @override
+  String get backupErrorInvalidGroup =>
+      'The backup contains an invalid alarm group.';
+
+  @override
+  String get backupErrorInvalidAlarm =>
+      'The backup contains an invalid alarm record.';
+
+  @override
+  String get backupErrorDuplicateAlarm =>
+      'The backup contains a duplicate alarm ID.';
+
+  @override
+  String get backupErrorInvalidSettings =>
+      'The backup contains an invalid app setting.';
+
+  @override
+  String get backupErrorInvalidSleep =>
+      'The backup contains an invalid sleep setting.';
+
+  @override
+  String get backupErrorInvalidCity =>
+      'The backup contains an invalid world clock.';
+
+  @override
+  String get skipNext => 'Skip next';
+
+  @override
+  String skipNextSuccess(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'The next occurrence of $count alarms will be skipped.',
+      one: 'The next occurrence will be skipped.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipNextNothing => 'There is no upcoming occurrence to skip.';
+
+  @override
+  String get nextSkipped => 'Next one skipped';
+
+  @override
+  String get clearSkip => 'Resume schedule';
+
+  @override
+  String get customVolume => 'Custom volume';
+
+  @override
+  String get customVolumeSubtitle =>
+      'Ring this alarm at its own level instead of the app volume';
+
+  @override
+  String get mathDifficulty => 'Math difficulty';
+
+  @override
+  String get mathEasy => 'Easy';
+
+  @override
+  String get mathMedium => 'Medium';
+
+  @override
+  String get mathHard => 'Hard';
+
+  @override
+  String get quickAlarm => 'Quick alarm';
+
+  @override
+  String get quickAlarmSubtitle =>
+      'Wake me after a set number of minutes. The alarm deletes itself once it rings.';
+
+  @override
+  String quickAlarmSet(String time) {
+    return 'Quick alarm set for $time.';
+  }
+
+  @override
+  String get dynamicColor => 'Wallpaper colours';
+
+  @override
+  String get dynamicColorSubtitle =>
+      'Use the Android system palette (Android 12 and later)';
+
+  @override
+  String get statistics => 'Statistics';
+
+  @override
+  String get statsEmptyTitle => 'No history yet';
+
+  @override
+  String get statsEmptyMessage =>
+      'Once your alarms start ringing, their numbers show up here.';
+
+  @override
+  String lastDays(int count) {
+    return '$count days';
+  }
+
+  @override
+  String get statsRang => 'Rang';
+
+  @override
+  String get statsSnoozed => 'Snoozed';
+
+  @override
+  String get statsDismissed => 'Dismissed';
+
+  @override
+  String get statsAutoSilenced => 'Auto-silenced';
+
+  @override
+  String get statsSnoozePerAlarm => 'Snoozes per alarm';
+
+  @override
+  String get statsSnoozePerAlarmHint =>
+      'Average number of snoozes each time an alarm rings.';
+
+  @override
+  String get statsByAlarm => 'By alarm';
+
+  @override
+  String get statsBusiestDays => 'Busiest days';
+
+  @override
+  String statsAlarmBreakdown(int rang, int snoozed) {
+    return 'Rang $rang times, snoozed $snoozed times';
+  }
+
+  @override
+  String get autoBackup => 'Automatic backup';
+
+  @override
+  String get autoBackupSubtitle =>
+      'Write a copy to a folder you choose, once a week';
+
+  @override
+  String get autoBackupChooseFolder => 'Choose folder';
+
+  @override
+  String get autoBackupOff => 'Off';
+
+  @override
+  String get autoBackupNever => 'Not written yet';
+
+  @override
+  String autoBackupLast(String date) {
+    return 'Last copy: $date';
+  }
+
+  @override
+  String get autoBackupFolderFailed => 'The folder could not be selected.';
+
+  @override
+  String get timerEmptyTitle => 'No timers running';
+
+  @override
+  String get timerEmptyMessage =>
+      'Pick a duration above to start one. You can run several at the same time.';
 }

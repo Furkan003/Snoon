@@ -1403,6 +1403,300 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Start and end time cannot be the same.'**
   String get sameStartEndError;
+
+  /// No description provided for @defaultAlarmRingtone.
+  ///
+  /// In en, this message translates to:
+  /// **'System alarm sound'**
+  String get defaultAlarmRingtone;
+
+  /// No description provided for @defaultTimerRingtone.
+  ///
+  /// In en, this message translates to:
+  /// **'System timer sound'**
+  String get defaultTimerRingtone;
+
+  /// No description provided for @backupErrorInvalidFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'The backup format is invalid.'**
+  String get backupErrorInvalidFormat;
+
+  /// No description provided for @backupErrorUnsupportedFile.
+  ///
+  /// In en, this message translates to:
+  /// **'This file is not a supported Snoon backup.'**
+  String get backupErrorUnsupportedFile;
+
+  /// No description provided for @backupErrorCorruptContent.
+  ///
+  /// In en, this message translates to:
+  /// **'The backup content is damaged or incomplete.'**
+  String get backupErrorCorruptContent;
+
+  /// No description provided for @backupErrorInvalidGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'The backup contains an invalid alarm group.'**
+  String get backupErrorInvalidGroup;
+
+  /// No description provided for @backupErrorInvalidAlarm.
+  ///
+  /// In en, this message translates to:
+  /// **'The backup contains an invalid alarm record.'**
+  String get backupErrorInvalidAlarm;
+
+  /// No description provided for @backupErrorDuplicateAlarm.
+  ///
+  /// In en, this message translates to:
+  /// **'The backup contains a duplicate alarm ID.'**
+  String get backupErrorDuplicateAlarm;
+
+  /// No description provided for @backupErrorInvalidSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'The backup contains an invalid app setting.'**
+  String get backupErrorInvalidSettings;
+
+  /// No description provided for @backupErrorInvalidSleep.
+  ///
+  /// In en, this message translates to:
+  /// **'The backup contains an invalid sleep setting.'**
+  String get backupErrorInvalidSleep;
+
+  /// No description provided for @backupErrorInvalidCity.
+  ///
+  /// In en, this message translates to:
+  /// **'The backup contains an invalid world clock.'**
+  String get backupErrorInvalidCity;
+
+  /// No description provided for @skipNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip next'**
+  String get skipNext;
+
+  /// No description provided for @skipNextSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{The next occurrence will be skipped.} other{The next occurrence of {count} alarms will be skipped.}}'**
+  String skipNextSuccess(int count);
+
+  /// No description provided for @skipNextNothing.
+  ///
+  /// In en, this message translates to:
+  /// **'There is no upcoming occurrence to skip.'**
+  String get skipNextNothing;
+
+  /// No description provided for @nextSkipped.
+  ///
+  /// In en, this message translates to:
+  /// **'Next one skipped'**
+  String get nextSkipped;
+
+  /// No description provided for @clearSkip.
+  ///
+  /// In en, this message translates to:
+  /// **'Resume schedule'**
+  String get clearSkip;
+
+  /// No description provided for @customVolume.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom volume'**
+  String get customVolume;
+
+  /// No description provided for @customVolumeSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Ring this alarm at its own level instead of the app volume'**
+  String get customVolumeSubtitle;
+
+  /// No description provided for @mathDifficulty.
+  ///
+  /// In en, this message translates to:
+  /// **'Math difficulty'**
+  String get mathDifficulty;
+
+  /// No description provided for @mathEasy.
+  ///
+  /// In en, this message translates to:
+  /// **'Easy'**
+  String get mathEasy;
+
+  /// No description provided for @mathMedium.
+  ///
+  /// In en, this message translates to:
+  /// **'Medium'**
+  String get mathMedium;
+
+  /// No description provided for @mathHard.
+  ///
+  /// In en, this message translates to:
+  /// **'Hard'**
+  String get mathHard;
+
+  /// No description provided for @quickAlarm.
+  ///
+  /// In en, this message translates to:
+  /// **'Quick alarm'**
+  String get quickAlarm;
+
+  /// No description provided for @quickAlarmSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Wake me after a set number of minutes. The alarm deletes itself once it rings.'**
+  String get quickAlarmSubtitle;
+
+  /// No description provided for @quickAlarmSet.
+  ///
+  /// In en, this message translates to:
+  /// **'Quick alarm set for {time}.'**
+  String quickAlarmSet(String time);
+
+  /// No description provided for @dynamicColor.
+  ///
+  /// In en, this message translates to:
+  /// **'Wallpaper colours'**
+  String get dynamicColor;
+
+  /// No description provided for @dynamicColorSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Use the Android system palette (Android 12 and later)'**
+  String get dynamicColorSubtitle;
+
+  /// No description provided for @statistics.
+  ///
+  /// In en, this message translates to:
+  /// **'Statistics'**
+  String get statistics;
+
+  /// No description provided for @statsEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No history yet'**
+  String get statsEmptyTitle;
+
+  /// No description provided for @statsEmptyMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Once your alarms start ringing, their numbers show up here.'**
+  String get statsEmptyMessage;
+
+  /// No description provided for @lastDays.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} days'**
+  String lastDays(int count);
+
+  /// No description provided for @statsRang.
+  ///
+  /// In en, this message translates to:
+  /// **'Rang'**
+  String get statsRang;
+
+  /// No description provided for @statsSnoozed.
+  ///
+  /// In en, this message translates to:
+  /// **'Snoozed'**
+  String get statsSnoozed;
+
+  /// No description provided for @statsDismissed.
+  ///
+  /// In en, this message translates to:
+  /// **'Dismissed'**
+  String get statsDismissed;
+
+  /// No description provided for @statsAutoSilenced.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-silenced'**
+  String get statsAutoSilenced;
+
+  /// No description provided for @statsSnoozePerAlarm.
+  ///
+  /// In en, this message translates to:
+  /// **'Snoozes per alarm'**
+  String get statsSnoozePerAlarm;
+
+  /// No description provided for @statsSnoozePerAlarmHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Average number of snoozes each time an alarm rings.'**
+  String get statsSnoozePerAlarmHint;
+
+  /// No description provided for @statsByAlarm.
+  ///
+  /// In en, this message translates to:
+  /// **'By alarm'**
+  String get statsByAlarm;
+
+  /// No description provided for @statsBusiestDays.
+  ///
+  /// In en, this message translates to:
+  /// **'Busiest days'**
+  String get statsBusiestDays;
+
+  /// No description provided for @statsAlarmBreakdown.
+  ///
+  /// In en, this message translates to:
+  /// **'Rang {rang} times, snoozed {snoozed} times'**
+  String statsAlarmBreakdown(int rang, int snoozed);
+
+  /// No description provided for @autoBackup.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic backup'**
+  String get autoBackup;
+
+  /// No description provided for @autoBackupSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Write a copy to a folder you choose, once a week'**
+  String get autoBackupSubtitle;
+
+  /// No description provided for @autoBackupChooseFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose folder'**
+  String get autoBackupChooseFolder;
+
+  /// No description provided for @autoBackupOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get autoBackupOff;
+
+  /// No description provided for @autoBackupNever.
+  ///
+  /// In en, this message translates to:
+  /// **'Not written yet'**
+  String get autoBackupNever;
+
+  /// No description provided for @autoBackupLast.
+  ///
+  /// In en, this message translates to:
+  /// **'Last copy: {date}'**
+  String autoBackupLast(String date);
+
+  /// No description provided for @autoBackupFolderFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The folder could not be selected.'**
+  String get autoBackupFolderFailed;
+
+  /// No description provided for @timerEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No timers running'**
+  String get timerEmptyTitle;
+
+  /// No description provided for @timerEmptyMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick a duration above to start one. You can run several at the same time.'**
+  String get timerEmptyMessage;
 }
 
 class _AppLocalizationsDelegate

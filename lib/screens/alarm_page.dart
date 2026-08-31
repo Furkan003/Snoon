@@ -8,6 +8,7 @@ import 'alarm_editor_page.dart';
 import 'groups_page.dart';
 import 'history_page.dart';
 import 'reliability_center_page.dart';
+import 'stats_page.dart';
 import 'settings_page.dart';
 
 class AlarmPage extends StatefulWidget {
@@ -108,6 +109,74 @@ class _AlarmPageState extends State<AlarmPage> {
     }
   }
 
+  Future<void> _quickAlarm() async {
+    final minutes = await showModalBottomSheet<int>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                context.l10n.quickAlarm,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 8),
+              Text(context.l10n.quickAlarmSubtitle),
+              const SizedBox(height: 18),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [10, 20, 30, 45, 60, 90]
+                    .map(
+                      (value) => ActionChip(
+                        label: Text(context.l10n.minutesShort(value)),
+                        onPressed: () => Navigator.pop(context, value),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (minutes == null || !mounted) return;
+    final target = DateTime.now().add(Duration(minutes: minutes));
+    await widget.store.addAlarm(
+      AlarmItem(
+        id: widget.store.newId('alarm'),
+        hour: target.hour,
+        minute: target.minute,
+        label: context.l10n.quickAlarm,
+        oneShotDate: DateTime(target.year, target.month, target.day),
+        deleteAfterRinging: true,
+        createdAt: DateTime.now(),
+      ),
+    );
+    if (mounted) {
+      showMessage(
+        context,
+        context.l10n.quickAlarmSet(clockText(target.hour, target.minute)),
+      );
+    }
+  }
+
+  Future<void> _skipNextSelected() async {
+    final skipped = await widget.store.skipNextOccurrence(_selected);
+    if (!mounted) return;
+    showMessage(
+      context,
+      skipped.isEmpty
+          ? context.l10n.skipNextNothing
+          : context.l10n.skipNextSuccess(skipped.length),
+    );
+    setState(_selected.clear);
+  }
+
   Future<void> _deleteSelected() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -146,6 +215,7 @@ class _AlarmPageState extends State<AlarmPage> {
           ),
           leading: _selectionMode
               ? IconButton(
+                  tooltip: context.l10n.cancel,
                   onPressed: () => setState(_selected.clear),
                   icon: const Icon(Icons.close),
                 )
@@ -161,6 +231,11 @@ class _AlarmPageState extends State<AlarmPage> {
                     tooltip: context.l10n.shiftToday,
                     onPressed: _shiftSelected,
                     icon: const Icon(Icons.more_time),
+                  ),
+                  IconButton(
+                    tooltip: context.l10n.skipNext,
+                    onPressed: _skipNextSelected,
+                    icon: const Icon(Icons.skip_next_outlined),
                   ),
                   IconButton(
                     tooltip: context.l10n.delete,
@@ -179,6 +254,9 @@ class _AlarmPageState extends State<AlarmPage> {
                       if (value == 'history') {
                         _open(HistoryPage(store: widget.store));
                       }
+                      if (value == 'stats') {
+                        _open(StatsPage(store: widget.store));
+                      }
                       if (value == 'reliability') {
                         _open(ReliabilityCenterPage(store: widget.store));
                       }
@@ -190,6 +268,10 @@ class _AlarmPageState extends State<AlarmPage> {
                       PopupMenuItem(
                         value: 'history',
                         child: Text(context.l10n.alarmHistory),
+                      ),
+                      PopupMenuItem(
+                        value: 'stats',
+                        child: Text(context.l10n.statistics),
                       ),
                       PopupMenuItem(
                         value: 'reliability',
@@ -267,6 +349,9 @@ class _AlarmPageState extends State<AlarmPage> {
                                   ? null
                                   : () =>
                                         widget.store.clearAlarmPause(alarm.id),
+                              onClearSkip: alarm.skippedDates.isEmpty
+                                  ? null
+                                  : () => widget.store.clearSkips(alarm.id),
                             ),
                           ),
                         ),
@@ -277,10 +362,25 @@ class _AlarmPageState extends State<AlarmPage> {
         ),
         floatingActionButton: _selectionMode
             ? null
-            : FloatingActionButton.large(
-                heroTag: 'alarm-add',
-                onPressed: () => _open(AlarmEditorPage(store: widget.store)),
-                child: const Icon(Icons.add),
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  FloatingActionButton.small(
+                    heroTag: 'alarm-quick',
+                    tooltip: context.l10n.quickAlarm,
+                    onPressed: _quickAlarm,
+                    child: const Icon(Icons.bolt_outlined),
+                  ),
+                  const SizedBox(height: 12),
+                  FloatingActionButton.large(
+                    heroTag: 'alarm-add',
+                    tooltip: context.l10n.newAlarm,
+                    onPressed: () =>
+                        _open(AlarmEditorPage(store: widget.store)),
+                    child: const Icon(Icons.add),
+                  ),
+                ],
               ),
       );
     },
@@ -358,6 +458,7 @@ class _AlarmCard extends StatelessWidget {
     required this.onLongPress,
     required this.onToggle,
     this.onClearPause,
+    this.onClearSkip,
   });
 
   final AlarmItem alarm;
@@ -368,6 +469,7 @@ class _AlarmCard extends StatelessWidget {
   final VoidCallback onLongPress;
   final ValueChanged<bool> onToggle;
   final VoidCallback? onClearPause;
+  final VoidCallback? onClearSkip;
 
   @override
   Widget build(BuildContext context) {
@@ -451,6 +553,13 @@ class _AlarmCard extends StatelessWidget {
                               text: context.l10n.paused,
                               color: const Color(0xFFF59E0B),
                               onTap: onClearPause,
+                            ),
+                          if (alarm.skippedDates.isNotEmpty)
+                            _Badge(
+                              icon: Icons.skip_next_outlined,
+                              text: context.l10n.nextSkipped,
+                              color: const Color(0xFFF59E0B),
+                              onTap: onClearSkip,
                             ),
                           if (alarm.todayShiftDate == dateKey(DateTime.now()))
                             _Badge(

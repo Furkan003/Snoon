@@ -10,35 +10,28 @@ DateTime? parseDate(dynamic value) {
   return DateTime.tryParse(value.toString());
 }
 
+/// Ringtone names picked before 1.1.2 were stored as a Turkish default label
+/// even when no ringtone had been chosen. Those placeholders map back to
+/// `null` so every locale renders its own default label.
+const _legacyRingtoneDefaults = {
+  'Sistem alarm sesi',
+  'Sistem zamanlayıcı sesi',
+  'Seçilen ses',
+};
+
+String? _storedRingtoneName(dynamic value) {
+  final name = value as String?;
+  if (name == null || name.isEmpty) return null;
+  return _legacyRingtoneDefaults.contains(name) ? null : name;
+}
+
 enum DismissTask { none, math, shake }
 
-extension DismissTaskX on DismissTask {
-  String get label => switch (this) {
-    DismissTask.none => 'Görev yok',
-    DismissTask.math => 'Matematik işlemi',
-    DismissTask.shake => 'Telefonu 5 kez salla',
-  };
-}
+enum MathDifficulty { easy, medium, hard }
 
 enum VolumeButtonAction { volume, snooze, dismiss }
 
 enum SnoonThemeMode { system, dark, light }
-
-extension SnoonThemeModeX on SnoonThemeMode {
-  String get label => switch (this) {
-    SnoonThemeMode.system => 'Sistem temasını kullan',
-    SnoonThemeMode.dark => 'Koyu tema',
-    SnoonThemeMode.light => 'Açık tema',
-  };
-}
-
-extension VolumeButtonActionX on VolumeButtonAction {
-  String get label => switch (this) {
-    VolumeButtonAction.volume => 'Ses düzeyini değiştir',
-    VolumeButtonAction.snooze => 'Alarmı ertele',
-    VolumeButtonAction.dismiss => 'Alarmı kapat',
-  };
-}
 
 class AlarmGroup {
   const AlarmGroup({
@@ -122,6 +115,9 @@ class AlarmItem {
     this.ringtoneUri,
     this.ringtoneName,
     this.dismissTask = DismissTask.none,
+    this.mathDifficulty = MathDifficulty.easy,
+    this.volume,
+    this.skippedDates = const [],
     this.morningRoutine = false,
     this.gentleReminderMinutes = 10,
     this.backupAlarmMinutes = 10,
@@ -146,6 +142,15 @@ class AlarmItem {
   final String? ringtoneUri;
   final String? ringtoneName;
   final DismissTask dismissTask;
+  final MathDifficulty mathDifficulty;
+
+  /// Ringing volume for this alarm alone. `null` falls back to
+  /// [AppSettings.alarmVolume].
+  final double? volume;
+
+  /// Dates this alarm skips once, as `yyyy-MM-dd`. Used by "skip the next one"
+  /// so a single occurrence can be dropped without disabling the alarm.
+  final List<String> skippedDates;
   final bool morningRoutine;
   final int gentleReminderMinutes;
   final int backupAlarmMinutes;
@@ -173,6 +178,9 @@ class AlarmItem {
     Object? ringtoneUri = _unset,
     Object? ringtoneName = _unset,
     DismissTask? dismissTask,
+    MathDifficulty? mathDifficulty,
+    Object? volume = _unset,
+    List<String>? skippedDates,
     bool? morningRoutine,
     int? gentleReminderMinutes,
     int? backupAlarmMinutes,
@@ -204,6 +212,9 @@ class AlarmItem {
           ? this.ringtoneName
           : ringtoneName as String?,
       dismissTask: dismissTask ?? this.dismissTask,
+      mathDifficulty: mathDifficulty ?? this.mathDifficulty,
+      volume: identical(volume, _unset) ? this.volume : volume as double?,
+      skippedDates: skippedDates ?? this.skippedDates,
       morningRoutine: morningRoutine ?? this.morningRoutine,
       gentleReminderMinutes:
           gentleReminderMinutes ?? this.gentleReminderMinutes,
@@ -235,6 +246,9 @@ class AlarmItem {
     'ringtoneUri': ringtoneUri,
     'ringtoneName': ringtoneName,
     'dismissTask': dismissTask.name,
+    'mathDifficulty': mathDifficulty.name,
+    'volume': volume,
+    'skippedDates': skippedDates,
     'morningRoutine': morningRoutine,
     'gentleReminderMinutes': gentleReminderMinutes,
     'backupAlarmMinutes': backupAlarmMinutes,
@@ -263,6 +277,12 @@ class AlarmItem {
       (value) => value.name == json['dismissTask'],
       orElse: () => DismissTask.none,
     ),
+    mathDifficulty: MathDifficulty.values.firstWhere(
+      (value) => value.name == json['mathDifficulty'],
+      orElse: () => MathDifficulty.easy,
+    ),
+    volume: (json['volume'] as num?)?.toDouble(),
+    skippedDates: List<String>.from(json['skippedDates'] as List? ?? const []),
     morningRoutine: json['morningRoutine'] as bool? ?? false,
     gentleReminderMinutes: json['gentleReminderMinutes'] as int? ?? 10,
     backupAlarmMinutes: json['backupAlarmMinutes'] as int? ?? 10,
@@ -271,6 +291,17 @@ class AlarmItem {
     todayShiftMinutes: json['todayShiftMinutes'] as int? ?? 0,
     createdAt: parseDate(json['createdAt']),
   );
+
+  /// Returns a copy without skip entries older than [from], so the list cannot
+  /// grow without bound over the life of an alarm.
+  AlarmItem withPrunedSkips({DateTime? from}) {
+    final today = dateKey(from ?? DateTime.now());
+    final kept = skippedDates
+        .where((date) => date.compareTo(today) >= 0)
+        .toList();
+    if (kept.length == skippedDates.length) return this;
+    return copyWith(skippedDates: kept);
+  }
 
   DateTime? nextOccurrence({DateTime? from, AlarmGroup? group}) {
     if (!enabled) return null;
@@ -291,9 +322,9 @@ class AlarmItem {
     for (var dayOffset = firstDayOffset; dayOffset < 370; dayOffset++) {
       final scheduleDate = DateTime(now.year, now.month, now.day + dayOffset);
       if (resumeAfter != null && !scheduleDate.isAfter(resumeAfter)) continue;
-      if (group?.excludedDates.contains(dateKey(scheduleDate)) ?? false) {
-        continue;
-      }
+      final key = dateKey(scheduleDate);
+      if (skippedDates.contains(key)) continue;
+      if (group?.excludedDates.contains(key) ?? false) continue;
       if (repeatDays.isNotEmpty && !repeatDays.contains(scheduleDate.weekday)) {
         continue;
       }
@@ -304,23 +335,24 @@ class AlarmItem {
       }
 
       var shift = 0;
-      if (todayShiftDate == dateKey(scheduleDate)) shift += todayShiftMinutes;
-      if (group?.todayShiftDate == dateKey(scheduleDate)) {
-        shift += group?.todayShiftMinutes ?? 0;
-      }
+      if (todayShiftDate == key) shift += todayShiftMinutes;
+      if (group?.todayShiftDate == key) shift += group?.todayShiftMinutes ?? 0;
       final end = isRange ? rangeEndMinutes! : startMinutes;
       for (
         var minutes = startMinutes;
         minutes <= end;
         minutes += intervalMinutes > 0 ? intervalMinutes : 1
       ) {
+        // The shift moves the wall-clock minute, not the absolute instant, so
+        // a shifted alarm keeps its intended local time across a daylight
+        // saving change. AlarmScheduler.nextTrigger does the same on Android.
         final candidate = DateTime(
           scheduleDate.year,
           scheduleDate.month,
           scheduleDate.day,
-          minutes ~/ 60,
-          minutes % 60,
-        ).add(Duration(minutes: shift));
+          0,
+          minutes + shift,
+        );
         if (candidate.isAfter(now)) return candidate;
       }
     }
@@ -331,9 +363,9 @@ class AlarmItem {
 class AppSettings {
   const AppSettings({
     this.alarmRingtoneUri,
-    this.alarmRingtoneName = 'Sistem alarm sesi',
+    this.alarmRingtoneName,
     this.timerRingtoneUri,
-    this.timerRingtoneName = 'Sistem zamanlayıcı sesi',
+    this.timerRingtoneName,
     this.alarmVolume = 0.8,
     this.autoSilenceMinutes = 10,
     this.vibrate = true,
@@ -344,12 +376,21 @@ class AppSettings {
     this.preNotificationMinutes = 10,
     this.showOnLockScreen = true,
     this.themeMode = SnoonThemeMode.system,
+    this.dynamicColor = true,
+    this.autoBackupFolder,
+    this.lastAutoBackupAt,
   });
 
   final String? alarmRingtoneUri;
-  final String alarmRingtoneName;
+
+  /// Display name of the picked alarm ringtone. `null` means the system
+  /// default, which the UI renders with the localized label.
+  final String? alarmRingtoneName;
   final String? timerRingtoneUri;
-  final String timerRingtoneName;
+
+  /// Display name of the picked timer ringtone. `null` means the system
+  /// default, which the UI renders with the localized label.
+  final String? timerRingtoneName;
   final double alarmVolume;
   final int autoSilenceMinutes;
   final bool vibrate;
@@ -361,11 +402,19 @@ class AppSettings {
   final bool showOnLockScreen;
   final SnoonThemeMode themeMode;
 
+  /// Follow the Android 12+ wallpaper palette when the platform offers one.
+  final bool dynamicColor;
+
+  /// Tree URI of the folder the user granted for automatic backups. `null`
+  /// disables them.
+  final String? autoBackupFolder;
+  final DateTime? lastAutoBackupAt;
+
   AppSettings copyWith({
     Object? alarmRingtoneUri = _unset,
-    String? alarmRingtoneName,
+    Object? alarmRingtoneName = _unset,
     Object? timerRingtoneUri = _unset,
-    String? timerRingtoneName,
+    Object? timerRingtoneName = _unset,
     double? alarmVolume,
     int? autoSilenceMinutes,
     bool? vibrate,
@@ -376,15 +425,22 @@ class AppSettings {
     int? preNotificationMinutes,
     bool? showOnLockScreen,
     SnoonThemeMode? themeMode,
+    bool? dynamicColor,
+    Object? autoBackupFolder = _unset,
+    Object? lastAutoBackupAt = _unset,
   }) => AppSettings(
     alarmRingtoneUri: identical(alarmRingtoneUri, _unset)
         ? this.alarmRingtoneUri
         : alarmRingtoneUri as String?,
-    alarmRingtoneName: alarmRingtoneName ?? this.alarmRingtoneName,
+    alarmRingtoneName: identical(alarmRingtoneName, _unset)
+        ? this.alarmRingtoneName
+        : alarmRingtoneName as String?,
     timerRingtoneUri: identical(timerRingtoneUri, _unset)
         ? this.timerRingtoneUri
         : timerRingtoneUri as String?,
-    timerRingtoneName: timerRingtoneName ?? this.timerRingtoneName,
+    timerRingtoneName: identical(timerRingtoneName, _unset)
+        ? this.timerRingtoneName
+        : timerRingtoneName as String?,
     alarmVolume: alarmVolume ?? this.alarmVolume,
     autoSilenceMinutes: autoSilenceMinutes ?? this.autoSilenceMinutes,
     vibrate: vibrate ?? this.vibrate,
@@ -396,6 +452,13 @@ class AppSettings {
         preNotificationMinutes ?? this.preNotificationMinutes,
     showOnLockScreen: showOnLockScreen ?? this.showOnLockScreen,
     themeMode: themeMode ?? this.themeMode,
+    dynamicColor: dynamicColor ?? this.dynamicColor,
+    autoBackupFolder: identical(autoBackupFolder, _unset)
+        ? this.autoBackupFolder
+        : autoBackupFolder as String?,
+    lastAutoBackupAt: identical(lastAutoBackupAt, _unset)
+        ? this.lastAutoBackupAt
+        : lastAutoBackupAt as DateTime?,
   );
 
   Map<String, dynamic> toJson() => {
@@ -413,15 +476,16 @@ class AppSettings {
     'preNotificationMinutes': preNotificationMinutes,
     'showOnLockScreen': showOnLockScreen,
     'themeMode': themeMode.name,
+    'dynamicColor': dynamicColor,
+    'autoBackupFolder': autoBackupFolder,
+    'lastAutoBackupAt': lastAutoBackupAt?.toIso8601String(),
   };
 
   factory AppSettings.fromJson(Map<String, dynamic> json) => AppSettings(
     alarmRingtoneUri: json['alarmRingtoneUri'] as String?,
-    alarmRingtoneName:
-        json['alarmRingtoneName'] as String? ?? 'Sistem alarm sesi',
+    alarmRingtoneName: _storedRingtoneName(json['alarmRingtoneName']),
     timerRingtoneUri: json['timerRingtoneUri'] as String?,
-    timerRingtoneName:
-        json['timerRingtoneName'] as String? ?? 'Sistem zamanlayıcı sesi',
+    timerRingtoneName: _storedRingtoneName(json['timerRingtoneName']),
     alarmVolume: (json['alarmVolume'] as num?)?.toDouble() ?? 0.8,
     autoSilenceMinutes: json['autoSilenceMinutes'] as int? ?? 10,
     vibrate: json['vibrate'] as bool? ?? true,
@@ -438,6 +502,9 @@ class AppSettings {
       (value) => value.name == json['themeMode'],
       orElse: () => SnoonThemeMode.system,
     ),
+    dynamicColor: json['dynamicColor'] as bool? ?? true,
+    autoBackupFolder: json['autoBackupFolder'] as String?,
+    lastAutoBackupAt: parseDate(json['lastAutoBackupAt']),
   );
 }
 
@@ -571,5 +638,68 @@ class WorldCity {
     name: json['name'] as String,
     offsetMinutes: json['offsetMinutes'] as int,
     timeZoneId: json['timeZoneId'] as String?,
+  );
+}
+
+/// One countdown. The native layer already schedules by id, so several can run
+/// at once; [target] is the wall-clock deadline while running and `null` while
+/// paused, which is what makes a timer survive the process being killed.
+class TimerItem {
+  const TimerItem({
+    required this.id,
+    required this.label,
+    required this.totalSeconds,
+    required this.remainingSeconds,
+    this.target,
+  });
+
+  final String id;
+  final String label;
+  final int totalSeconds;
+
+  /// Seconds left at the moment the timer was paused.
+  final int remainingSeconds;
+  final DateTime? target;
+
+  bool get running => target != null;
+
+  /// Seconds still to go, derived from [target] while running so a paused app
+  /// does not lose time.
+  int secondsLeft({DateTime? now}) {
+    if (target == null) return remainingSeconds;
+    final left = target!.difference(now ?? DateTime.now()).inSeconds + 1;
+    return left.clamp(0, 7 * 86400);
+  }
+
+  TimerItem copyWith({
+    String? label,
+    int? totalSeconds,
+    int? remainingSeconds,
+    Object? target = _unset,
+  }) => TimerItem(
+    id: id,
+    label: label ?? this.label,
+    totalSeconds: totalSeconds ?? this.totalSeconds,
+    remainingSeconds: remainingSeconds ?? this.remainingSeconds,
+    target: identical(target, _unset) ? this.target : target as DateTime?,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'label': label,
+    'totalSeconds': totalSeconds,
+    'remainingSeconds': remainingSeconds,
+    'target': target?.toIso8601String(),
+  };
+
+  factory TimerItem.fromJson(Map<String, dynamic> json) => TimerItem(
+    id: json['id'] as String,
+    label: json['label'] as String? ?? '',
+    totalSeconds: (json['totalSeconds'] as int? ?? 300).clamp(1, 7 * 86400),
+    remainingSeconds: (json['remainingSeconds'] as int? ?? 300).clamp(
+      0,
+      7 * 86400,
+    ),
+    target: parseDate(json['target']),
   );
 }
