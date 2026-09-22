@@ -45,6 +45,7 @@ class AppStore extends ChangeNotifier {
   static const _groupsInitializedKey = 'groups_initialized_v1';
   static const _citiesInitializedKey = 'cities_initialized_v1';
   static const _promptedPermissionsKey = 'prompted_permissions_v1';
+  static const _volumeButtonMigratedKey = 'volume_button_default_migrated_v1';
   static const _timerStateKey = 'timer_state_v1';
   static const _timersKey = 'timers_v1';
   static const _stopwatchKey = 'stopwatch_v1';
@@ -167,6 +168,7 @@ class AppStore extends ChangeNotifier {
       } catch (_) {
         settings = const AppSettings();
       }
+      await _migrateVolumeButtonDefault();
     }
     final rawSleep = _prefs.getString(_sleepKey);
     if (rawSleep != null) {
@@ -289,6 +291,20 @@ class AppStore extends ChangeNotifier {
       _sleepReminderNeedsSync = false;
       await _scheduleSleepReminder(sleepProfile);
     }
+  }
+
+  /// Snoozing on a volume press used to be the default, so every install from
+  /// before that changed carries an explicit `snooze` that would otherwise
+  /// outlive the new default. Move those over once; a user who wants it back
+  /// sets it again in settings and this never runs a second time.
+  Future<void> _migrateVolumeButtonDefault() async {
+    if (_prefs.getBool(_volumeButtonMigratedKey) ?? false) return;
+    await _prefs.setBool(_volumeButtonMigratedKey, true);
+    if (settings.volumeButtonAction != VolumeButtonAction.snooze) return;
+    settings = settings.copyWith(
+      volumeButtonAction: VolumeButtonAction.volume,
+    );
+    await _prefs.setString(_settingsKey, jsonEncode(settings.toJson()));
   }
 
   /// Whether the startup flow has already explained [permission] once.

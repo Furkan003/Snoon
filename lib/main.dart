@@ -17,7 +17,12 @@ Future<void> main() async {
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.light,
-      systemNavigationBarColor: Color(0xFF0A0B10),
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarDividerColor: Colors.transparent,
+      // Android 10+ paints its own scrim behind a transparent navigation bar
+      // unless contrast enforcement is switched off, which would leave the bar
+      // looking tinted rather than transparent.
+      systemNavigationBarContrastEnforced: false,
       systemNavigationBarIconBrightness: Brightness.light,
     ),
   );
@@ -70,19 +75,30 @@ class SnoonApp extends StatelessWidget {
           value: SystemUiOverlayStyle(
             statusBarColor: Colors.transparent,
             statusBarIconBrightness: dark ? Brightness.light : Brightness.dark,
-            systemNavigationBarColor: dark
-                ? const Color(0xFF0A0B10)
-                : const Color(0xFFF6F5FA),
+            systemNavigationBarColor: Colors.transparent,
+            systemNavigationBarDividerColor: Colors.transparent,
+            systemNavigationBarContrastEnforced: false,
+            // The bar shows the page behind it now, so the icons take their
+            // contrast from the app's own background rather than a bar colour.
             systemNavigationBarIconBrightness: dark
                 ? Brightness.light
                 : Brightness.dark,
           ),
-          child: SafeArea(
-            top: false,
-            left: false,
-            right: false,
-            bottom: true,
-            child: child ?? const SizedBox.shrink(),
+          // SafeArea keeps the pages clear of the navigation bar, so the strip
+          // behind the now-transparent bar would otherwise fall through to the
+          // Android window background -- light grey under the light theme,
+          // which is the white bar this replaced. Painting the app's own
+          // background across the whole window makes the bar read as part of
+          // the page in both themes.
+          child: ColoredBox(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            child: SafeArea(
+              top: false,
+              left: false,
+              right: false,
+              bottom: true,
+              child: child ?? const SizedBox.shrink(),
+            ),
           ),
         );
       },

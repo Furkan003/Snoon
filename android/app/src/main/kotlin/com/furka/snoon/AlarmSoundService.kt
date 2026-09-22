@@ -46,6 +46,10 @@ class AlarmSoundService : Service() {
         /// not the thirty it used to take.
         private const val RAMP_STEPS = 10
         private const val RAMP_STEP_MILLIS = 1_000L
+
+        /// How long to give a Ringtone to actually produce sound before
+        /// treating it as a silent failure and falling back.
+        private const val PLAYBACK_HEALTH_CHECK_MILLIS = 1_200L
     }
 
     private var ringtone: Ringtone? = null
@@ -55,6 +59,7 @@ class AlarmSoundService : Service() {
     private var vibrator: Vibrator? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var previousAlarmStreamVolume: Int? = null
+    private var forcedAlarmStreamVolume: Int? = null
     private val handler = Handler(Looper.getMainLooper())
     private val stringsContext: Context
         get() = LocaleHelper.wrap(this)
@@ -234,12 +239,19 @@ class AlarmSoundService : Service() {
                         1f
                     }
                     candidate.play()
-                    // No isPlaying check here: play() starts asynchronously, so
-                    // it routinely still reads false at this point and stopping
-                    // on that killed a ringtone that was about to sound.
-                    // ringtoneCandidates has already proven the URI opens.
+                    // Deliberately no isPlaying check right here: play() starts
+                    // asynchronously, so it routinely still reads false at this
+                    // point and acting on that killed a ringtone that was about
+                    // to sound. Opening the URI is checked by
+                    // ringtoneCandidates; that the sound actually arrived is
+                    // checked a moment later by the health check below, because
+                    // a Ringtone can also fail silently after play() returns.
                     ringtone = candidate
                     if (record.optBoolean("gradualVolume", true)) rampVolume()
+                    handler.postDelayed(
+                        { verifyRingtonePlaying(record, attributes, candidates) },
+                        PLAYBACK_HEALTH_CHECK_MILLIS,
+                    )
                     return
                 } catch (error: Exception) {
                     Log.w(TAG, "Zil sesi açılamadı: $uri", error)
@@ -247,8 +259,46 @@ class AlarmSoundService : Service() {
             }
         }
 
-        // Çok özelleştirilmiş OEM ROM'larında Ringtone nesnesi null dönebilir.
-        // Aynı URI'leri doğrudan MediaPlayer ile son kez dene.
+        if (startFallbackPlayer(record, attributes, candidates)) return
+        Log.e(TAG, "Cihazda oynatılabilir zil sesi bulunamadı; acil tona geçiliyor")
+        startEmergencyTone(configuredVolume)
+    }
+
+    /// A Ringtone that opened cleanly can still end up silent on some ROMs. If
+    /// nothing is playing shortly after start, hand over to the MediaPlayer
+    /// chain rather than leaving the alarm mute.
+    private fun verifyRingtonePlaying(
+        record: JSONObject,
+        attributes: AudioAttributes,
+        candidates: List<Uri>,
+    ) {
+        val playing = try {
+            ringtone?.isPlaying == true
+        } catch (_: Exception) {
+            false
+        }
+        if (playing) return
+        Log.w(TAG, "Zil sesi sessiz kaldı; yedek oynatıcıya geçiliyor")
+        try {
+            ringtone?.stop()
+        } catch (_: Exception) {
+            // Zaten durmuş olabilir.
+        }
+        ringtone = null
+        if (startFallbackPlayer(record, attributes, candidates)) return
+        val configuredVolume = record.optDouble("volume", 0.8)
+            .toFloat()
+            .coerceIn(0.05f, 1f)
+        startEmergencyTone(configuredVolume)
+    }
+
+    /// Çok özelleştirilmiş OEM ROM'larında Ringtone nesnesi null dönebilir veya
+    /// sessiz kalabilir. Aynı URI'leri doğrudan MediaPlayer ile dener.
+    private fun startFallbackPlayer(
+        record: JSONObject,
+        attributes: AudioAttributes,
+        candidates: List<Uri>,
+    ): Boolean {
         for (uri in candidates) {
             try {
                 fallbackPlayer = MediaPlayer().apply {
@@ -267,14 +317,13 @@ class AlarmSoundService : Service() {
                     start()
                 }
                 if (record.optBoolean("gradualVolume", true)) rampVolume()
-                return
+                return true
             } catch (error: Exception) {
                 Log.w(TAG, "Yedek oynatıcı zil sesini açamadı: $uri", error)
                 stopFallbackPlayer()
             }
         }
-        Log.e(TAG, "Cihazda oynatılabilir zil sesi bulunamadı; acil tona geçiliyor")
-        startEmergencyTone(configuredVolume)
+        return false
     }
 
     private fun ringtoneCandidates(record: JSONObject): List<Uri> {
@@ -360,6 +409,7 @@ class AlarmSoundService : Service() {
                     previousAlarmStreamVolume = current
                 }
                 audio.setStreamVolume(AudioManager.STREAM_ALARM, target, 0)
+                forcedAlarmStreamVolume = target
             }
         } catch (error: Exception) {
             Log.w(TAG, "Alarm ses kanalı ayarlanamadı", error)
@@ -371,10 +421,16 @@ class AlarmSoundService : Service() {
     /// changed themselves.
     private fun restoreAlarmStreamVolume() {
         val previous = previousAlarmStreamVolume ?: return
+        val forced = forcedAlarmStreamVolume
         previousAlarmStreamVolume = null
+        forcedAlarmStreamVolume = null
         try {
-            getSystemService(AudioManager::class.java)
-                .setStreamVolume(AudioManager.STREAM_ALARM, previous, 0)
+            val audio = getSystemService(AudioManager::class.java)
+            // Only undo our own change. If the volume no longer reads as what
+            // we set, the user moved it while the alarm rang and that choice
+            // outranks the level they had beforehand.
+            if (audio.getStreamVolume(AudioManager.STREAM_ALARM) != forced) return
+            audio.setStreamVolume(AudioManager.STREAM_ALARM, previous, 0)
         } catch (error: Exception) {
             Log.w(TAG, "Alarm ses kanalı geri yüklenemedi", error)
         }
