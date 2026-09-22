@@ -16,11 +16,15 @@ class HomeShell extends StatefulWidget {
   State<HomeShell> createState() => _HomeShellState();
 }
 
+/// Keys for the one-off startup explanations, stored by [AppStore] so a
+/// declined permission is not re-asked on every launch.
+const _notificationPrompt = 'notifications';
+const _exactAlarmPrompt = 'exact_alarm';
+const _fullScreenPrompt = 'full_screen_intent';
+
 class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   int _index = 0;
   bool _permissionFlowRunning = false;
-  bool _promptedExactAlarm = false;
-  bool _promptedFullScreen = false;
 
   late final List<Widget> _pages = [
     AlarmPage(store: widget.store),
@@ -60,15 +64,19 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     final l10n = context.l10n;
     _permissionFlowRunning = true;
     try {
-      if (!await widget.store.native.notificationsGranted()) {
+      if (!await widget.store.native.notificationsGranted() &&
+          !widget.store.wasPermissionPrompted(_notificationPrompt)) {
+        await widget.store.markPermissionPrompted(_notificationPrompt);
         await widget.store.native.requestNotificationPermission();
       }
       if (!mounted) return;
 
       final exactAlarmGranted = await widget.store.native
           .canScheduleExactAlarms();
-      if (!exactAlarmGranted && !_promptedExactAlarm) {
-        _promptedExactAlarm = true;
+      if (!exactAlarmGranted &&
+          !widget.store.wasPermissionPrompted(_exactAlarmPrompt)) {
+        await widget.store.markPermissionPrompted(_exactAlarmPrompt);
+        if (!mounted) return;
         final openSettings = await _showPermissionExplanation(
           icon: Icons.alarm_on_outlined,
           title: l10n.exactAlarmPermission,
@@ -83,8 +91,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
       final fullScreenGranted = await widget.store.native
           .canUseFullScreenIntent();
-      if (!fullScreenGranted && !_promptedFullScreen) {
-        _promptedFullScreen = true;
+      if (!fullScreenGranted &&
+          !widget.store.wasPermissionPrompted(_fullScreenPrompt)) {
+        await widget.store.markPermissionPrompted(_fullScreenPrompt);
+        if (!mounted) return;
         final openSettings = await _showPermissionExplanation(
           icon: Icons.screen_lock_portrait_outlined,
           title: l10n.fullScreenPermission,

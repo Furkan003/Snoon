@@ -36,6 +36,16 @@ class AlarmSoundService : Service() {
         const val NOTIFICATION_ID = 4207
         private const val CHANNEL_ID = "ringing_alarm"
         private const val TAG = "SnoonAlarmSound"
+
+        /// Gradual volume opens here rather than at 0.05. An alarm that starts
+        /// at five percent of an already scaled stream is inaudible, which
+        /// defeats the point of it being an alarm.
+        private const val RAMP_START_VOLUME = 0.35f
+
+        /// Reach full volume in RAMP_STEPS * RAMP_STEP_MILLIS -- ten seconds,
+        /// not the thirty it used to take.
+        private const val RAMP_STEPS = 10
+        private const val RAMP_STEP_MILLIS = 1_000L
     }
 
     private var ringtone: Ringtone? = null
@@ -44,6 +54,7 @@ class AlarmSoundService : Service() {
     private var emergencyToneLoop: Runnable? = null
     private var vibrator: Vibrator? = null
     private var wakeLock: PowerManager.WakeLock? = null
+    private var previousAlarmStreamVolume: Int? = null
     private val handler = Handler(Looper.getMainLooper())
     private val stringsContext: Context
         get() = LocaleHelper.wrap(this)
@@ -218,15 +229,15 @@ class AlarmSoundService : Service() {
                     candidate.audioAttributes = attributes
                     candidate.isLooping = true
                     candidate.volume = if (record.optBoolean("gradualVolume", true)) {
-                        0.05f
+                        RAMP_START_VOLUME
                     } else {
                         1f
                     }
                     candidate.play()
-                    if (!candidate.isPlaying) {
-                        candidate.stop()
-                        continue
-                    }
+                    // No isPlaying check here: play() starts asynchronously, so
+                    // it routinely still reads false at this point and stopping
+                    // on that killed a ringtone that was about to sound.
+                    // ringtoneCandidates has already proven the URI opens.
                     ringtone = candidate
                     if (record.optBoolean("gradualVolume", true)) rampVolume()
                     return
@@ -247,7 +258,11 @@ class AlarmSoundService : Service() {
                     isLooping = true
                     prepare()
                     val startVolume =
-                        if (record.optBoolean("gradualVolume", true)) 0.05f else 1f
+                        if (record.optBoolean("gradualVolume", true)) {
+                            RAMP_START_VOLUME
+                        } else {
+                            1f
+                        }
                     setVolume(startVolume, startVolume)
                     start()
                 }
@@ -283,10 +298,44 @@ class AlarmSoundService : Service() {
         listOfNotNull(
             RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM),
             Settings.System.DEFAULT_ALARM_ALERT_URI,
+        ).forEach(values::add)
+        // Some OEM ROMs (MIUI) point the default alarm at a theme file living
+        // inside another app's Android/data sandbox, mode 0660 and owned by a
+        // system user, so we cannot open it whatever permissions we hold. The
+        // installed alarm ringtones are ordinary world-readable media, so list
+        // them as real fallbacks before giving up on a proper alarm sound.
+        values.addAll(installedAlarmUris())
+        // Absolute last resort. A notification blip is a poor alarm -- it is
+        // short and quiet -- so it only runs when nothing above could open.
+        listOfNotNull(
             RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION),
             Settings.System.DEFAULT_NOTIFICATION_URI,
         ).forEach(values::add)
-        return values.toList()
+        return values.filter(::isPlayable)
+    }
+
+    /// Alarm ringtones the device actually ships, as MediaStore content URIs.
+    private fun installedAlarmUris(): List<Uri> {
+        val uris = mutableListOf<Uri>()
+        try {
+            val manager = RingtoneManager(this)
+            manager.setType(RingtoneManager.TYPE_ALARM)
+            val cursor = manager.cursor
+            while (cursor.moveToNext()) {
+                uris.add(manager.getRingtoneUri(cursor.position))
+            }
+        } catch (error: Exception) {
+            Log.w(TAG, "Sistem alarm sesleri listelenemedi", error)
+        }
+        return uris
+    }
+
+    /// Whether this process can actually open [uri]. Checking up front beats
+    /// starting a candidate and stopping it again, which is audible as a chirp.
+    private fun isPlayable(uri: Uri): Boolean = try {
+        contentResolver.openInputStream(uri).use { it != null }
+    } catch (_: Exception) {
+        false
     }
 
     private fun ensureAlarmStreamIsAudible(configuredVolume: Float) {
@@ -301,11 +350,33 @@ class AlarmSoundService : Service() {
             val target = (maximum * configuredVolume)
                 .roundToInt()
                 .coerceIn(minimum, maximum)
-            if (audio.getStreamVolume(AudioManager.STREAM_ALARM) != target) {
+            val current = audio.getStreamVolume(AudioManager.STREAM_ALARM)
+            if (current != target) {
+                // Remember what the user had before we raise it, so stopAlarm
+                // can hand the phone back unchanged. Only the first alarm of a
+                // ringing session records it: a second alarm arriving while one
+                // rings would otherwise memorise our own raised value.
+                if (previousAlarmStreamVolume == null) {
+                    previousAlarmStreamVolume = current
+                }
                 audio.setStreamVolume(AudioManager.STREAM_ALARM, target, 0)
             }
         } catch (error: Exception) {
             Log.w(TAG, "Alarm ses kanalı ayarlanamadı", error)
+        }
+    }
+
+    /// Puts the system alarm stream back where the user had it. Leaving it
+    /// raised would silently rewrite a phone-wide setting the user never
+    /// changed themselves.
+    private fun restoreAlarmStreamVolume() {
+        val previous = previousAlarmStreamVolume ?: return
+        previousAlarmStreamVolume = null
+        try {
+            getSystemService(AudioManager::class.java)
+                .setStreamVolume(AudioManager.STREAM_ALARM, previous, 0)
+        } catch (error: Exception) {
+            Log.w(TAG, "Alarm ses kanalı geri yüklenemedi", error)
         }
     }
 
@@ -338,9 +409,11 @@ class AlarmSoundService : Service() {
     }
 
     private fun rampVolume() {
-        for (step in 1..15) {
+        for (step in 1..RAMP_STEPS) {
             handler.postDelayed({
-                val value = (0.05f + 0.95f * step / 15f).coerceIn(0.05f, 1f)
+                val progress = step.toFloat() / RAMP_STEPS
+                val value = (RAMP_START_VOLUME + (1f - RAMP_START_VOLUME) * progress)
+                    .coerceIn(RAMP_START_VOLUME, 1f)
                 try {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                         ringtone?.volume = value
@@ -349,7 +422,7 @@ class AlarmSoundService : Service() {
                 } catch (_: Exception) {
                     // Alarm bu sırada kapatılmış olabilir.
                 }
-            }, step * 2_000L)
+            }, step * RAMP_STEP_MILLIS)
         }
     }
 
@@ -442,6 +515,7 @@ class AlarmSoundService : Service() {
     private fun stopAlarm() {
         handler.removeCallbacksAndMessages(null)
         stopPlayback()
+        restoreAlarmStreamVolume()
         vibrator?.cancel()
         vibrator = null
         releaseWakeLock()

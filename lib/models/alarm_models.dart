@@ -372,7 +372,10 @@ class AppSettings {
     this.gradualVolume = true,
     this.snoozeMinutes = 5,
     this.maxSnoozes = 3,
-    this.volumeButtonAction = VolumeButtonAction.snooze,
+    // Off by default: the volume keys keep adjusting the volume, which is what
+    // someone reaching for them while an alarm rings almost always wants.
+    // Snoozing on a volume press is opt-in from settings.
+    this.volumeButtonAction = VolumeButtonAction.volume,
     this.preNotificationMinutes = 10,
     this.showOnLockScreen = true,
     this.themeMode = SnoonThemeMode.system,
@@ -494,7 +497,7 @@ class AppSettings {
     maxSnoozes: json['maxSnoozes'] as int? ?? 3,
     volumeButtonAction: VolumeButtonAction.values.firstWhere(
       (value) => value.name == json['volumeButtonAction'],
-      orElse: () => VolumeButtonAction.snooze,
+      orElse: () => VolumeButtonAction.volume,
     ),
     preNotificationMinutes: json['preNotificationMinutes'] as int? ?? 10,
     showOnLockScreen: json['showOnLockScreen'] as bool? ?? true,
@@ -667,8 +670,12 @@ class TimerItem {
   /// does not lose time.
   int secondsLeft({DateTime? now}) {
     if (target == null) return remainingSeconds;
-    final left = target!.difference(now ?? DateTime.now()).inSeconds + 1;
-    return left.clamp(0, 7 * 86400);
+    // Round up rather than truncate-then-add-one. Truncation alone would drop
+    // the partial second and render a fresh countdown one short, but the
+    // blanket +1 handed that second back on every pause -- and at an exact
+    // boundary produced totalSeconds + 1, which pauseTimer then persisted.
+    final millis = target!.difference(now ?? DateTime.now()).inMilliseconds;
+    return (millis / 1000).ceil().clamp(0, totalSeconds);
   }
 
   TimerItem copyWith({

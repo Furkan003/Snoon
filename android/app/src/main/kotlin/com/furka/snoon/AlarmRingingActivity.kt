@@ -419,7 +419,10 @@ class AlarmRingingActivity : ComponentActivity(), SensorEventListener {
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         if (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
-            return when (record.optString("volumeButtonAction", "snooze")) {
+            // Defaults to "volume": returning false below leaves the keys doing
+            // their normal job, so a volume press cannot snooze unless the user
+            // turned that on in settings.
+            return when (record.optString("volumeButtonAction", "volume")) {
                 "snooze" -> {
                     snooze()
                     true

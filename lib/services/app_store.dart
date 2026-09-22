@@ -44,6 +44,7 @@ class AppStore extends ChangeNotifier {
   static const _languageSelectedKey = 'language_selected_v1';
   static const _groupsInitializedKey = 'groups_initialized_v1';
   static const _citiesInitializedKey = 'cities_initialized_v1';
+  static const _promptedPermissionsKey = 'prompted_permissions_v1';
   static const _timerStateKey = 'timer_state_v1';
   static const _timersKey = 'timers_v1';
   static const _stopwatchKey = 'stopwatch_v1';
@@ -69,6 +70,12 @@ class AppStore extends ChangeNotifier {
   SleepProfile sleepProfile = const SleepProfile();
   String localeCode = 'en';
   bool languageSelected = false;
+
+  /// Permission prompts the user has already been shown once. Kept in storage
+  /// rather than in widget state so closing the app does not make the startup
+  /// flow ask all over again; the Reliability Centre is where a declined
+  /// permission gets asked for a second time.
+  Set<String> promptedPermissions = {};
   String? lastNativeError;
 
   /// Wallpaper accent reported by Android 12+, or `null` on older releases.
@@ -106,6 +113,8 @@ class AppStore extends ChangeNotifier {
         ? deviceCode
         : 'en';
     languageSelected = _prefs.getBool(_languageSelectedKey) ?? false;
+    promptedPermissions = (_prefs.getStringList(_promptedPermissionsKey) ?? [])
+        .toSet();
     alarms = _decodeList(
       _alarmsKey,
       AlarmItem.fromJson,
@@ -280,6 +289,20 @@ class AppStore extends ChangeNotifier {
       _sleepReminderNeedsSync = false;
       await _scheduleSleepReminder(sleepProfile);
     }
+  }
+
+  /// Whether the startup flow has already explained [permission] once.
+  bool wasPermissionPrompted(String permission) =>
+      promptedPermissions.contains(permission);
+
+  /// Records that [permission] has been explained, so the next launch does not
+  /// repeat the dialog.
+  Future<void> markPermissionPrompted(String permission) async {
+    if (!promptedPermissions.add(permission)) return;
+    await _prefs.setStringList(
+      _promptedPermissionsKey,
+      promptedPermissions.toList(),
+    );
   }
 
   Future<void> selectLanguage({
